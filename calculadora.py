@@ -145,6 +145,21 @@ st.markdown(
   background: #cdd6e1;
 }
 
+/* ===== Uniformar métricas en móvil ===== */
+@media (max-width: 640px) {
+  /* Elimina el marco gris solo en móvil para que todos se vean iguales */
+  .soft-box {
+    background: transparent !important;
+    border: none !important;
+    padding: 0 !important;
+  }
+
+  /* Da separación vertical uniforme entre métricas cuando se apilan */
+  .value-title {
+    margin-top: .35rem;
+  }
+}
+
     </style>
     """,
     unsafe_allow_html=True
