@@ -108,6 +108,43 @@ st.markdown(
         font-weight: 800;
         line-height: 1.1;
     }
+
+/* ===== Fix responsive tabs (móvil) ===== */
+@media (max-width: 640px) {
+  /* El contenedor de pestañas: que no centre, que permita scroll horizontal */
+  .stTabs [role="tablist"] {
+    justify-content: flex-start;   /* en móvil, alineadas a la izquierda */
+    gap: 8px;                      /* menos separación */
+    overflow-x: auto;              /* scroll horizontal si no caben */
+    overflow-y: hidden;
+    padding-bottom: .25rem;
+    scrollbar-width: thin;         /* Firefox */
+  }
+
+  /* Cada pestaña ocupa solo su contenido y no se rompe en varias líneas */
+  .stTabs [role="tab"] {
+    flex: 0 0 auto;                /* no crecer/encoger, ancho por contenido */
+    white-space: nowrap;           /* evitar salto de línea en títulos largos */
+    padding: .5rem .9rem;          /* menos padding */
+    font-size: .95rem;             /* tipografía un poco menor */
+    border-radius: 10px 10px 0 0;
+  }
+
+  /* Ajustes suaves del formulario sticky para que no “aplasten” contenido */
+  div[data-testid="stForm"] {
+    top: .5rem;
+    padding: .75rem .9rem;
+    margin-bottom: .75rem;
+  }
+}
+
+/* Opcional: estética del scrollbar (Chromium/WebKit) */
+.stTabs [role="tablist"]::-webkit-scrollbar { height: 6px; }
+.stTabs [role="tablist"]::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: #cdd6e1;
+}
+
     </style>
     """,
     unsafe_allow_html=True
