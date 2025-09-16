@@ -111,34 +111,27 @@ st.markdown(
 
 /* ===== Fix responsive tabs (móvil) ===== */
 @media (max-width: 640px) {
-  /* El contenedor de pestañas: que no centre, que permita scroll horizontal */
   .stTabs [role="tablist"] {
-    justify-content: flex-start;   /* en móvil, alineadas a la izquierda */
-    gap: 8px;                      /* menos separación */
-    overflow-x: auto;              /* scroll horizontal si no caben */
+    justify-content: flex-start;
+    gap: 8px;
+    overflow-x: auto;
     overflow-y: hidden;
     padding-bottom: .25rem;
-    scrollbar-width: thin;         /* Firefox */
+    scrollbar-width: thin;
   }
-
-  /* Cada pestaña ocupa solo su contenido y no se rompe en varias líneas */
   .stTabs [role="tab"] {
-    flex: 0 0 auto;                /* no crecer/encoger, ancho por contenido */
-    white-space: nowrap;           /* evitar salto de línea en títulos largos */
-    padding: .5rem .9rem;          /* menos padding */
-    font-size: .95rem;             /* tipografía un poco menor */
+    flex: 0 0 auto;
+    white-space: nowrap;
+    padding: .5rem .9rem;
+    font-size: .95rem;
     border-radius: 10px 10px 0 0;
   }
-
-  /* Ajustes suaves del formulario sticky para que no “aplasten” contenido */
   div[data-testid="stForm"] {
     top: .5rem;
     padding: .75rem .9rem;
     margin-bottom: .75rem;
   }
 }
-
-/* Opcional: estética del scrollbar (Chromium/WebKit) */
 .stTabs [role="tablist"]::-webkit-scrollbar { height: 6px; }
 .stTabs [role="tablist"]::-webkit-scrollbar-thumb {
   border-radius: 999px;
@@ -147,19 +140,15 @@ st.markdown(
 
 /* ===== Uniformar métricas en móvil ===== */
 @media (max-width: 640px) {
-  /* Elimina el marco gris solo en móvil para que todos se vean iguales */
   .soft-box {
     background: transparent !important;
     border: none !important;
     padding: 0 !important;
   }
-
-  /* Da separación vertical uniforme entre métricas cuando se apilan */
   .value-title {
     margin-top: .35rem;
   }
 }
-
     </style>
     """,
     unsafe_allow_html=True
@@ -301,8 +290,8 @@ def eur(x: float) -> str:
 # ----------------------------
 # PESTAÑAS
 # ----------------------------
-tab_simulador, tab_comparador, tab_publicidad = st.tabs(
-    ["📊 Simulador", "📐 Comparador: Fija vs Mixta", "🖼️ Publicidad"]
+tab_simulador, tab_comparador, tab_publicidad, tab_inversion = st.tabs(
+    ["📊 Simulador", "📐 Comparador: Fija vs Mixta", "🖼️ Publicidad", "💹 Analiza Inversión"]
 )
 
 # =========
@@ -473,7 +462,7 @@ with tab_comparador:
 
     # Preparar cuotas de mixta (ya se usen o no en la visual)
     n2 = max(n_cmp - m1_months, 0)
-    # Cuota periodo 1 (cuota como si r1 regirá todo el plazo)
+    # Cuota periodo 1
     if r1_m == 0:
         cuota_p1 = P_cmp / n_cmp
     else:
@@ -481,9 +470,7 @@ with tab_comparador:
 
     # Si hay periodo 2, cuota recalculada
     if n2 > 0:
-        # Si no hay solución, mostramos guion en la visual; pero calculamos para coherencia con 0.
         r2_for_calc = r2_m_solution if r2_m_solution is not None else 0.0
-        # Saldo tras P1 (necesario para cuota P2)
         _, _, _, saldo_p1_tmp = mixed_total_interest(P_cmp, n_cmp, r1_m, m1_months, r2_for_calc)
         if r2_for_calc == 0:
             cuota_p2 = saldo_p1_tmp / n2
@@ -492,10 +479,9 @@ with tab_comparador:
     else:
         cuota_p2 = 0.0
 
-    # Mostrar INTERESES y TIPOS en grande (con caja gris para r2) + cuotas P1 y P2
+    # Mostrar INTERESES y TIPOS + cuotas
     cI1, cI2, cI3, cI4 = st.columns(4)
 
-    # Interés periodo 1 (grande, sin gris)
     with cI1:
         st.markdown(
             f"<div class='value-title'>Interés periodo 1 (mixta)</div>"
@@ -503,7 +489,6 @@ with tab_comparador:
             unsafe_allow_html=True
         )
 
-    # Interés necesario periodo 2 (grande, caja gris)
     with cI2:
         if m1_months >= n_cmp:
             st.markdown(
@@ -534,7 +519,6 @@ with tab_comparador:
                     unsafe_allow_html=True
                 )
 
-    # Cuota mensual periodo 1 (grande)
     with cI3:
         st.markdown(
             f"<div class='value-title'>Cuota mensual periodo 1</div>"
@@ -542,7 +526,6 @@ with tab_comparador:
             unsafe_allow_html=True
         )
 
-    # Cuota mensual periodo 2 (grande)
     with cI4:
         if n2 > 0 and r2_m_solution is not None:
             st.markdown(
@@ -610,7 +593,6 @@ with tab_comparador:
         use_container_width=True
     )
 
-    # Diferencia para comprobar
     diff = mixed_total_chk - tgt_fixed
     st.caption(f"Diferencia (mixta - fija): {eur(diff)} (≈ 0 si la solución iguala los intereses).")
 
@@ -621,3 +603,396 @@ with tab_publicidad:
     st.markdown("<div style='text-align:center'>", unsafe_allow_html=True)
     st.image("publi.jpg", use_container_width=True)
     st.markdown("</div>", unsafe_allow_html=True)
+
+# =========
+# TAB 4: Analiza Inversión
+# =========
+with tab_inversion:
+    # --- Apartado 1: Hipoteca sobre inversión ---
+    st.markdown(
+        """
+        <div class="param-header">
+          <span class="param-chip">Hipoteca de la Inversión</span>
+          <span class="param-subtle">Configura el precio, financiación y condiciones para ver tu cuota mensual.</span>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+    with st.form("params_form_inversion", clear_on_submit=False):
+        c1, c2 = st.columns([1.2, 1])
+        with c1:
+            precio_vivienda = st.number_input(
+                "Precio de la vivienda (€)",
+                min_value=10000.0, value=200000.0, step=1000.0, format="%.2f", key="precio_inv"
+            )
+        with c2:
+            pct_financiacion = st.slider(
+                "Porcentaje de financiación (%)",
+                min_value=0, max_value=100, value=90, step=5, key="pct_finan_inv"
+            )
+
+        c3, c4 = st.columns([1, 1])
+        with c3:
+            plazo_inv = st.slider(
+                "Plazo de la hipoteca (años)",
+                min_value=1, max_value=40, value=30, step=1, key="plazo_inv"
+            )
+        with c4:
+            interes_inv = st.number_input(
+                "Interés aplicado (% TIN anual)",
+                min_value=0.0, max_value=30.0, value=2.7, step=0.05, format="%.2f", key="interes_inv"
+            )
+        _ = st.form_submit_button("✅ Calcular cuota")
+
+    importe_financiado = precio_vivienda * pct_financiacion / 100
+    n_meses_inv = plazo_inv * 12
+    r_mensual_inv = (interes_inv / 100.0) / 12.0
+    df_inv = amortization_schedule(importe_financiado, r_mensual_inv, n_meses_inv)
+
+    if not df_inv.empty:
+        cuota_mensual_inv = float(df_inv["Cuota"].iloc[0])
+
+        # Caja resaltada (mismo estilo azul que el cashflow)
+        st.markdown(
+            f"""
+            <div style="
+                background:#e8f0fe;
+                border:1px solid #4A90E2;
+                border-radius:12px;
+                padding:1rem 1.25rem;
+                margin:.5rem 0 1rem 0;
+            ">
+              <div class="value-title">💳 Cuota mensual hipoteca</div>
+              <div class="value-big">{eur(cuota_mensual_inv)}</div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+    st.divider()
+
+
+    # --- Apartado 2: Aportación Inicial ---
+st.markdown(
+    """
+    <div class="param-header">
+      <span class="param-chip">Aportación Inicial</span>
+      <span class="param-subtle">Entrada + impuestos + gastos fijos + comisión de apertura (+ extra opcional).</span>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
+
+comunidades = {
+    "IVA (Vivienda nueva)": (0.10, 0.012),
+    "Andalucía": (0.07, 0.015),
+    "Aragón": (0.085, 0.012),
+    "Asturias": (0.08, 0.015),
+    "Baleares": (0.08, 0.0075),
+    "Canarias": (0.065, 0.015),
+    "Cantabria": (0.08, 0.015),
+    "Castilla León": (0.08, 0.015),
+    "Castilla la Mancha": (0.09, 0.015),
+    "Cataluña": (0.10, 0.015),
+    "Comunidad Valenciana": (0.10, 0.015),
+    "Extremadura": (0.08, 0.015),
+    "Galicia": (0.10, 0.015),
+    "Comunidad de Madrid": (0.06, 0.0075),
+    "Murcia": (0.08, 0.015),
+    "Navarra": (0.06, 0.005),
+    "País Vasco": (0.07, 0.005),
+    "La Rioja": (0.07, 0.01)
+}
+
+comunidad = st.selectbox("Comunidad Autónoma", list(comunidades.keys()), key="comunidad_inv")
+itp, ajd = comunidades[comunidad]
+
+entrada_pct = 100 - pct_financiacion
+entrada_eur = precio_vivienda * entrada_pct / 100
+impuestos_pct = (itp + ajd) * 100
+impuestos = precio_vivienda * (itp + ajd)
+
+# Detalle porcentajes para mostrar como "ITP/IVA X% + AJD Y%"
+def _fmt_pct(x: float) -> str:
+    s = f"{x:.2f}".rstrip("0").rstrip(".")
+    return s.replace(".", ",")  # estilo español
+
+itp_text = _fmt_pct(itp * 100)
+ajd_text = _fmt_pct(ajd * 100)
+
+
+# Conceptos fijos
+registro_notaria = 1500
+tasacion = 400
+gestoria = 400
+comision_apertura = importe_financiado * 0.02
+
+# Aportación extra (reforma / otros)
+aportacion_extra = st.number_input(
+    "Aportación extra (reforma / otro concepto) (€)",
+    min_value=0.0, value=0.0, step=100.0, format="%.2f", key="aport_extra"
+)
+
+gastos_fijos = registro_notaria + tasacion + gestoria
+aportacion_total = entrada_eur + impuestos + gastos_fijos + comision_apertura + aportacion_extra
+
+# Métricas rápidas arriba (con % de impuestos al lado en pequeño)
+cA, cB, cC = st.columns(3)
+cA.metric("💰 Entrada", f"{entrada_pct:.1f}% = {eur(entrada_eur)}")
+
+with cB:
+    st.markdown(
+        f"""
+        <div class='value-title'>
+            📑 Impuestos (ITP/IVA + AJD)
+            <span style="font-size:0.85em;color:#5f6570;margin-left:.35rem">
+                ITP/IVA {itp_text}% + AJD {ajd_text}%
+            </span>
+        </div>
+        <div class='value-big'>{eur(impuestos)}</div>
+        """,
+        unsafe_allow_html=True
+    )
+
+cC.metric("🧾 Gastos fijos (Reg.+Not.+Tas.+Gest.)", eur(gastos_fijos))
+st.metric("💸 Comisión de apertura (2%)", eur(comision_apertura))
+
+# Caja resaltada en azul para la aportación total (mismo estilo que la cuota mensual / cashflow)
+st.markdown(
+    f"""
+    <div style="
+        background:#e8f0fe;
+        border:1px solid #4A90E2;
+        border-radius:12px;
+        padding:1rem 1.25rem;
+        margin:.5rem 0 1rem 0;
+    ">
+      <div class="value-title">📊 Aportación inicial total</div>
+      <div class="value-big">{eur(aportacion_total)}</div>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
+
+# Tabla resumen detallada (incluye la aportación extra)
+resumen_df = pd.DataFrame({
+    "Concepto": [
+        "Entrada (no financiado)",
+        "Impuestos (ITP/IVA + AJD)",
+        "Registro y Notaría",
+        "Tasación inmueble",
+        "Gestoría",
+        "Comisión apertura (2%)",
+        "Aportación extra (reforma / otros)",
+        "TOTAL APORTACIÓN INICIAL"
+    ],
+    "Importe": [
+        entrada_eur,
+        impuestos,
+        registro_notaria,
+        tasacion,
+        gestoria,
+        comision_apertura,
+        aportacion_extra,
+        aportacion_total
+    ]
+})
+
+with st.expander("📘 Resumen — Aportación Inicial", expanded=False):
+    st.dataframe(
+        resumen_df.style.format({"Importe": eur}),
+        use_container_width=True
+    )
+
+
+st.caption(
+    "Nota: Gastos fijos asumidos: Registro y Notaría = 1500 €, Tasación = 400 €, Gestoría = 400 €. "
+    "La comisión de apertura es el 2% del importe financiado."
+)
+
+
+
+# 👇 Línea separadora entre la Sección 2 y la 3
+st.divider()
+
+# --- Apartado 3: Ingresos por Alquiler — Cashflow ---
+st.markdown(
+    """
+    <div class="param-header">
+      <span class="param-chip">Ingresos de Alquiler</span>
+      <span class="param-subtle">Define ingresos y gastos para calcular el cashflow anual.</span>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
+
+with st.form("params_form_alquiler", clear_on_submit=False):
+    c1, c2 = st.columns([1, 1])
+    with c1:
+        alquiler_mensual = st.number_input(
+            "Alquiler mensual estimado (€)",
+            min_value=0.0, value=1000.0, step=50.0, format="%.2f", key="alq_mensual"
+        )
+        comunidad_mensual = st.number_input(
+            "Comunidad (mensual) (€)",
+            min_value=0.0, value=40.0, step=5.0, format="%.2f", key="comunidad_mensual"
+        )
+        seguros_mensual = st.number_input(
+            "Seguros (mensual) (€)",
+            min_value=0.0, value=60.0, step=10.0, format="%.2f", key="seguros_mensual"
+        )
+    with c2:
+        ibi_anual = st.number_input(
+            "IBI (anual) (€)",
+            min_value=0.0, value=150.0, step=25.0, format="%.2f", key="ibi_anual"
+        )
+        mantenimiento_anual = st.number_input(
+            "Mantenimiento (anual) (€)",
+            min_value=0.0, value=0.0, step=50.0, format="%.2f", key="mnt_anual"
+        )
+    _ = st.form_submit_button("✅ Calcular cashflow")
+
+# Cálculos (anualizando lo que corresponda)
+ingresos_anuales = alquiler_mensual * 12
+
+# Gasto de hipoteca anual desde la cuota mensual calculada en el Apartado 1
+try:
+    hipoteca_anual = float(cuota_mensual_inv) * 12
+except NameError:
+    hipoteca_anual = 0.0
+
+otros_gastos_anuales = (
+    ibi_anual +
+    comunidad_mensual * 12 +
+    mantenimiento_anual +
+    seguros_mensual * 12
+)
+gastos_anuales_totales = otros_gastos_anuales + hipoteca_anual
+cashflow_anual = ingresos_anuales - gastos_anuales_totales
+
+# Métricas: ingresos + hipoteca + otros gastos
+cA, cB, cC = st.columns(3)
+cA.metric("📈 Ingresos anuales por alquiler", eur(ingresos_anuales))
+cB.metric("🏦 Gastos de hipoteca anuales", eur(hipoteca_anual))
+cC.metric("📉 Otros gastos anuales (IBI + comunidad + mantenimiento + seguros)", eur(otros_gastos_anuales))
+
+# Caja resaltada en azul para el cashflow (incluye hipoteca)
+st.markdown(
+    f"""
+    <div style="
+        background:#e8f0fe;
+        border:1px solid #4A90E2;
+        border-radius:12px;
+        padding:1rem 1.25rem;
+        margin:.5rem 0 1rem 0;
+    ">
+      <div class="value-title">💧 Cashflow anual</div>
+      <div class="value-big">{eur(cashflow_anual)}</div>
+    </div>
+    """,
+    unsafe_allow_html=True
+)
+
+st.caption("El cashflow anual mostrado **incluye** hipoteca. No incluye vacancias, IRPF ni otros posibles ajustes.")
+
+
+# Línea separadora antes de la nueva sección de ratios
+st.divider()
+
+# --- Apartado 4: Rentabilidad (ratios) ---
+st.markdown("<h2 style='margin:0 0 .5rem 0'>📈 Rentabilidad</h2>", unsafe_allow_html=True)
+st.markdown(
+    """
+    <div class="param-subtle" style="margin-bottom:.5rem">
+      Ratios clave de la inversión. Valores destacados en verde y una breve descripción bajo cada uno.
+    </div>
+    """,
+    unsafe_allow_html=True
+)
+
+# Usa por defecto el plazo de hipoteca seleccionado en el Apartado 1 (plazo_inv),
+# pero deja que el usuario lo cambie si quiere.
+default_horizonte = int(plazo_inv) if 'plazo_inv' in locals() else 5
+horizonte_anios = st.number_input(
+    "Horizonte (años) para comparar el interés compuesto",
+    min_value=1, max_value=40, value=default_horizonte, step=1, key="horizonte_comp"
+)
+# Cálculos
+r_simple = 0.0 if (aportacion_total is None or aportacion_total <= 0) else (cashflow_anual / aportacion_total)
+r_comp = ((1 + horizonte_anios * r_simple) ** (1 / horizonte_anios)) - 1  # equivalente compuesto
+
+def fmt_pct(x: float) -> str:
+    return f"{x*100:,.2f} %".replace(".", ",")  # estilo es-ES con coma
+
+c1, c2 = st.columns(2)
+
+with c1:
+    # Tarjeta verde: Rentabilidad sobre aportación (Cash-on-Cash)
+    st.markdown(
+        f"""
+        <div style="
+            background:#e8f5e9;
+            border:1px solid #4caf50;
+            border-radius:12px;
+            padding:1rem 1.25rem;
+            margin:.5rem 0 1rem 0;
+        ">
+          <div class="value-title">💶 Rentabilidad sobre aportación (Cash-on-Cash)</div>
+          <div class="value-big">{fmt_pct(r_simple)}</div>
+          <div style="font-size:0.9em;color:#5f6570;margin-top:.35rem">
+            <em>Cashflow anual / Aportación inicial</em>. También llamado <strong>Cash-on-Cash Return (CoC)</strong>.
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+with c2:
+    # Tarjeta verde: Interés compuesto equivalente
+    st.markdown(
+        f"""
+        <div style="
+            background:#e8f5e9;
+            border:1px solid #4caf50;
+            border-radius:12px;
+            padding:1rem 1.25rem;
+            margin:.5rem 0 1rem 0;
+        ">
+          <div class="value-title">📈 Interés compuesto equivalente</div>
+          <div class="value-big">{fmt_pct(r_comp)}</div>
+          <div style="font-size:0.9em;color:#5f6570;margin-top:.35rem">
+            Tasa anual constante que, durante {horizonte_anios} año(s), genera el mismo beneficio que una
+            rentabilidad simple de {fmt_pct(r_simple)}. (Fórmula: <em>((1 + n·r)<sup>1/n</sup> − 1)</em>).<br/>
+            También conocida como <strong>Tasa Anual Equivalente (TAE) de la inversión</strong>.
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+# Tabla comparativa año a año (ocultable): simple vs compuesto
+n_h = int(horizonte_anios)
+years = list(range(1, n_h + 1))
+
+def comp_equiv(r: float, n: int) -> float:
+    base = 1 + n * r
+    return (base ** (1 / n) - 1) if base > 0 else np.nan
+
+df_ratios = pd.DataFrame({
+    "Año": years,
+    "Rentabilidad sobre aportación (Cash-on-Cash)": [r_simple] * n_h,
+    "Interés compuesto equivalente": [comp_equiv(r_simple, n) for n in years],
+})
+
+# Preformatear % para evitar Styler y poder ocultar el índice
+df_display = df_ratios.copy()
+df_display["Rentabilidad sobre aportación (Cash-on-Cash)"] = df_display[
+    "Rentabilidad sobre aportación (Cash-on-Cash)"
+].map(fmt_pct)
+df_display["Interés compuesto equivalente"] = df_display[
+    "Interés compuesto equivalente"
+].map(fmt_pct)
+
+with st.expander("🔍 Comparativa por año (simple vs compuesto)", expanded=False):
+    st.dataframe(df_display, use_container_width=True, hide_index=True)
