@@ -222,7 +222,6 @@ def euro_input(label: str, key: str, default: float, decimals: int = 2,
         val = max(val, float(min_value))
     if max_value is not None:
         val = min(val, float(max_value))
-
     return float(val)
 
 def render_footer():
@@ -678,7 +677,6 @@ with tab_bonif:
     )
 
     a1, a2, a3 = st.columns(3)
-
     a1.metric("💳 Cuota mensual (bonificada)", eur(monthly_payment_bon), delta=eur(-ahorro_cuota_mes))
 
     with a2:
@@ -706,45 +704,43 @@ with tab_bonif:
     )
 
     # -------------------------
-    # Prima orientativa (ING)
+    # Texto informativo (antes de Prima orientativa)
     # -------------------------
-    # -------------------------
-# Texto informativo (antes de Prima orientativa)
-# -------------------------
-st.markdown(
-    """
-    <div style="
-        background:#f5f7fa;
-        border:1px solid #e6e9ef;
-        border-radius:14px;
-        padding:1rem 1.25rem;
-        text-align:center;
-        color:#2b2f36;
-        box-shadow: 0 6px 18px rgba(0,0,0,0.05);
-        margin: .25rem 0 1rem 0;
-    ">
-      <div style="font-weight:800; font-size:1.05rem; margin-bottom:.35rem;">
-        💡 Antes de comparar bonificaciones…
-      </div>
-      <div style="font-size:.98rem; line-height:1.45; color:#5f6570;">
-        ¿Sabías que los seguros que firmas bonificados suelen ser entre un <strong>30%–40% más caros</strong>
-        que los que no son contratados a través del banco?<br/><br/>
-        Además, los seguros de vida <strong>suben con el paso del tiempo</strong>, pero la bonificación se mantiene
-        <strong>estable</strong>. Por eso, esta diferencia puede hacer que merezca la pena contratar el seguro
-        <strong>por fuera de la entidad bancaria</strong>.<br/><br/>
-        A continuación, verás una <strong>prima orientativa</strong> de lo que costaría con una entidad bancaria como <strong>ING</strong>.
-        Y si quieres saber cuánto podríamos mejorarlo para evaluar si esta bonificación merece la pena,
-        <strong>no dudes en contactar con nuestro equipo</strong>.
-      </div>
-    </div>
-    """,
-    unsafe_allow_html=True
-)
+    st.markdown(
+        """
+        <div style="
+            background:#f5f7fa;
+            border:1px solid #e6e9ef;
+            border-radius:14px;
+            padding:1rem 1.25rem;
+            text-align:center;
+            color:#2b2f36;
+            box-shadow: 0 6px 18px rgba(0,0,0,0.05);
+            margin: .25rem 0 1rem 0;
+        ">
+          <div style="font-weight:800; font-size:1.05rem; margin-bottom:.35rem;">
+            💡 Antes de comparar bonificaciones…
+          </div>
+          <div style="font-size:.98rem; line-height:1.45; color:#5f6570;">
+            ¿Sabías que los seguros que firmas bonificados suelen ser entre un <strong>30%–40% más caros</strong>
+            que los que no son contratados a través del banco?<br/><br/>
+            Además, los seguros de vida <strong>suben con el paso del tiempo</strong>, pero la bonificación se mantiene
+            <strong>estable</strong>. Por eso, esta diferencia puede hacer que merezca la pena contratar el seguro
+            <strong>por fuera de la entidad bancaria</strong>.<br/><br/>
+            A continuación, verás una <strong>prima orientativa</strong> de lo que costaría con una entidad bancaria como <strong>ING</strong>.
+            Y si quieres saber cuánto podríamos mejorarlo para evaluar si esta bonificación merece la pena,
+            <strong>no dudes en contactar con nuestro equipo</strong>.
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
 
-    
-    
     st.divider()
 
+    # -------------------------
+    # Prima orientativa (ING)
+    # -------------------------
     st.markdown(
         """
         <div class="param-header">
@@ -780,10 +776,7 @@ st.markdown(
         st.info("Introduce una edad y un capital válidos para obtener la prima orientativa.")
     else:
         prima_estimada = prima_orientativa_ing(float(edad_ing), float(capital_ing), PRIMA_ING_DF)
-
-        # ✅ Estilo como st.metric (sin tarjeta azul)
         st.metric("🧾 Prima orientativa (mensual)", eur(prima_estimada))
-
         st.caption(
             "Nota: estimación basada en interpolación lineal por edad y capital sobre la matriz interna. "
             "No contempla condiciones de suscripción, salud, profesión, coberturas adicionales, ni promociones."
@@ -861,14 +854,11 @@ with tab_comparador:
         st.stop()
 
     df_fix_cmp = amortization_schedule(P_cmp, rfix_m, n_cmp)
-    total_interest_fixed = float(df_fix_cmp["Intereses"].sum())
     monthly_payment_fixed = float(df_fix_cmp["Cuota"].iloc[0])
 
     m1_months = Y_change * 12
     r1_m = (R1_mixed / 100.0) / 12.0
-    r2_m_solution, tgt_fixed, mixed_total, i_p1, i_p2 = solve_r2_for_equal_interest(
-        P_cmp, n_cmp, rfix_m, r1_m, m1_months
-    )
+    r2_m_solution, tgt_fixed, _, _, _ = solve_r2_for_equal_interest(P_cmp, n_cmp, rfix_m, r1_m, m1_months)
 
     colA, colB, colC = st.columns(3)
     colA.metric("💡 Intereses totales FIJA (objetivo)", eur(tgt_fixed))
