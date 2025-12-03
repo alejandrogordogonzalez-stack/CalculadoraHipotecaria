@@ -481,7 +481,6 @@ with tab_bonif:
 
     ahorro_cuota_mes = monthly_payment_base - monthly_payment_bon
     ahorro_anual = ahorro_cuota_mes * 12
-    ahorro_total_cuotas = ahorro_cuota_mes * n_months_b  # ahorro acumulado estimado (suma de cuotas)
 
     st.markdown(
         f"""
@@ -502,57 +501,30 @@ with tab_bonif:
     )
 
     a1, a2, a3 = st.columns(3)
+
+    # 1) Se queda en el mismo sitio
     a1.metric("💳 Cuota mensual (bonificada)", eur(monthly_payment_bon), delta=eur(-ahorro_cuota_mes))
-    a2.metric("🧾 Ahorro mensual", eur(ahorro_cuota_mes))
+
+    # 2) Caja verde aplicada al "Ahorro mensual" (sin moverlo)
+    with a2:
+        st.markdown(
+            f"""
+            <div style="
+                background:#e8f5e9;
+                border:1px solid #4caf50;
+                border-radius:12px;
+                padding:1rem 1.25rem;
+                margin:.25rem 0 0 0;
+            ">
+              <div class="value-title">🧾 Ahorro mensual</div>
+              <div class="value-big">{eur(ahorro_cuota_mes)}</div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+    # 3) Ahorro anual normal
     a3.metric("📆 Ahorro anual", eur(ahorro_anual))
-
-    st.markdown(
-        f"""
-        <div style="
-            background:#e8f5e9;
-            border:1px solid #4caf50;
-            border-radius:12px;
-            padding:1rem 1.25rem;
-            margin:.25rem 0 1rem 0;
-        ">
-          <div class="value-title">🏁 Ahorro total estimado (suma de cuotas en todo el plazo)</div>
-          <div class="value-big">{eur(ahorro_total_cuotas)}</div>
-        </div>
-        """,
-        unsafe_allow_html=True
-    )
-
-    comp_df = pd.DataFrame({
-        "Concepto": [
-            "TIN anual",
-            "Cuota mensual",
-            "Ahorro mensual",
-            "Ahorro anual",
-            "Ahorro total estimado (suma de cuotas)",
-        ],
-        "Sin bonificar": [
-            f"{annual_rate_pct_b:.2f} %",
-            monthly_payment_base,
-            0.0,
-            0.0,
-            0.0,
-        ],
-        "Bonificada": [
-            f"{annual_rate_bonif:.2f} %",
-            monthly_payment_bon,
-            ahorro_cuota_mes,
-            ahorro_anual,
-            ahorro_total_cuotas,
-        ],
-    })
-
-    st.dataframe(
-        comp_df.style.format({
-            "Sin bonificar": lambda x: x if isinstance(x, str) else eur(x),
-            "Bonificada": lambda x: x if isinstance(x, str) else eur(x),
-        }),
-        use_container_width=True
-    )
 
     st.caption(
         "Nota: aquí medimos el ahorro como reducción de cuota por la bajada del TIN. "
