@@ -1,4 +1,3 @@
-import math
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
@@ -155,8 +154,12 @@ st.markdown(
 )
 
 # ============================
-# Utilidades de amortización
+# Utilidades
 # ============================
+def eur(x: float) -> str:
+    s = f"{x:,.2f} €"
+    return s.replace(",", "X").replace(".", ",").replace("X", ".")
+
 def amortization_schedule(P: float, r_m: float, n: int) -> pd.DataFrame:
     """Cuadro de amortización con tipo mensual constante r_m durante n meses."""
     if P <= 0 or n <= 0:
@@ -171,6 +174,7 @@ def amortization_schedule(P: float, r_m: float, n: int) -> pd.DataFrame:
     for m in range(1, n + 1):
         interest = balance * r_m if r_m != 0 else 0.0
         principal_pay = payment - interest if r_m != 0 else payment
+
         if m == n:
             principal_pay = balance
             payment_eff = principal_pay + interest
@@ -189,6 +193,7 @@ def amortization_schedule(P: float, r_m: float, n: int) -> pd.DataFrame:
             }
         )
         balance = balance_end
+
     return pd.DataFrame(rows)
 
 def mixed_total_interest(P: float, n: int, r1_m: float, m1: int, r2_m: float):
@@ -212,7 +217,7 @@ def mixed_total_interest(P: float, n: int, r1_m: float, m1: int, r2_m: float):
     for _ in range(m1):
         interest = balance * r1_m if r1_m != 0 else 0.0
         principal_pay = payment1 - interest if r1_m != 0 else payment1
-        balance = balance - principal_pay
+        balance -= principal_pay
         interest_p1 += interest
 
     n2 = n - m1
@@ -230,7 +235,7 @@ def mixed_total_interest(P: float, n: int, r1_m: float, m1: int, r2_m: float):
     for _ in range(n2):
         interest = bal * r2_m if r2_m != 0 else 0.0
         principal_pay = payment2 - interest if r2_m != 0 else payment2
-        bal = bal - principal_pay
+        bal -= principal_pay
         interest_p2 += interest
 
     return interest_p1 + interest_p2, interest_p1, interest_p2, balance
@@ -263,8 +268,8 @@ def solve_r2_for_equal_interest(P: float, n: int, r_fixed_m: float, r1_m: float,
         f_hi = f(hi)
         attempts += 1
 
-    total_mixed, ip1, ip2, _ = mixed_total_interest(P, n, r1_m, m1, r2_m=lo)
     if f_lo * f_hi > 0:
+        total_mixed, ip1, ip2, _ = mixed_total_interest(P, n, r1_m, m1, r2_m=lo)
         return None, target, total_mixed, ip1, ip2
 
     for _ in range(80):
@@ -275,7 +280,6 @@ def solve_r2_for_equal_interest(P: float, n: int, r_fixed_m: float, r1_m: float,
             break
         if f_lo * f_mid <= 0:
             hi = mid
-            f_hi = f_mid
         else:
             lo = mid
             f_lo = f_mid
@@ -284,8 +288,95 @@ def solve_r2_for_equal_interest(P: float, n: int, r_fixed_m: float, r1_m: float,
     total_mixed, ip1, ip2, _ = mixed_total_interest(P, n, r1_m, m1, r2_m_solution)
     return r2_m_solution, target, total_mixed, ip1, ip2
 
-def eur(x: float) -> str:
-    return f"{x:,.2f} €"
+# ============================
+# Matriz prima orientativa (ING) + interpolación (edad x capital)
+# ============================
+CAPITALS_ING = [50000, 75000, 100000, 125000, 150000, 175000, 200000, 225000, 250000, 275000, 300000, 325000, 350000, 375000, 400000]
+
+PREMIAS_ING = {
+    18: [9.41, 13.81, 18.64, 22.88, 27.43, 31.96, 36.50, 41.25, 45.83, 50.42, 54.56, 59.19, 63.74, 68.27, 72.81],
+    19: [9.25, 13.88, 18.60, 23.13, 27.75, 32.38, 37.00, 41.63, 46.26, 50.88, 55.39, 60.13, 64.76, 69.39, 73.79],
+    20: [9.16, 13.73, 18.31, 22.89, 27.69, 32.05, 36.70, 41.20, 45.78, 50.36, 54.74, 59.51, 64.09, 68.67, 72.77],
+    21: [9.20, 13.78, 18.38, 22.98, 27.75, 32.17, 36.83, 41.36, 45.96, 50.56, 54.99, 59.74, 64.34, 68.94, 73.15],
+    22: [9.23, 13.84, 18.45, 23.07, 27.82, 32.30, 36.96, 41.52, 46.14, 50.75, 55.25, 59.98, 64.58, 69.21, 73.53],
+    23: [9.27, 13.89, 18.52, 23.16, 27.88, 32.42, 37.08, 41.69, 46.32, 50.95, 55.50, 60.21, 64.83, 69.47, 73.91],
+    24: [9.30, 13.95, 18.60, 23.25, 27.95, 32.55, 37.21, 41.85, 46.49, 51.14, 55.76, 60.45, 65.09, 69.74, 74.29],
+    25: [9.34, 14.00, 18.67, 23.34, 28.01, 32.67, 37.34, 42.01, 46.67, 51.34, 56.01, 60.68, 65.35, 70.01, 74.68],
+    26: [9.27, 13.90, 18.60, 23.18, 27.83, 32.46, 37.04, 41.68, 46.34, 51.00, 55.47, 60.04, 64.75, 69.38, 74.11],
+    27: [9.21, 13.81, 18.54, 23.01, 27.64, 32.25, 36.74, 41.36, 46.00, 50.67, 54.94, 59.41, 64.15, 68.74, 73.53],
+    28: [9.14, 13.71, 18.47, 22.85, 27.46, 32.04, 36.44, 41.04, 45.67, 50.34, 54.40, 58.88, 63.55, 68.11, 72.96],
+    29: [9.08, 13.62, 18.41, 22.69, 27.27, 31.82, 36.13, 40.72, 45.33, 50.00, 53.87, 58.36, 62.95, 67.48, 71.89],
+    30: [9.01, 13.52, 18.34, 22.53, 27.09, 31.60, 35.83, 40.36, 45.00, 49.50, 53.33, 57.84, 62.34, 66.85, 70.82],
+    31: [9.29, 13.95, 19.03, 23.24, 27.81, 32.59, 37.04, 41.71, 46.43, 50.93, 55.11, 59.77, 64.42, 69.08, 73.18],
+    32: [9.58, 14.39, 19.71, 23.94, 28.54, 33.57, 38.26, 43.07, 47.86, 52.37, 56.89, 61.71, 66.50, 71.32, 75.55],
+    33: [9.86, 14.82, 20.40, 24.64, 29.28, 34.56, 39.48, 44.43, 49.29, 53.80, 58.68, 63.64, 68.59, 73.56, 77.91],
+    34: [10.15, 15.26, 21.09, 25.34, 30.01, 35.54, 40.69, 45.77, 50.72, 55.23, 60.46, 65.57, 70.67, 75.79, 80.26],
+    35: [10.43, 15.65, 21.80, 26.09, 31.69, 36.52, 41.87, 47.11, 52.17, 57.42, 62.25, 67.50, 72.76, 78.01, 82.62],
+    36: [11.01, 16.51, 23.01, 27.52, 33.55, 38.81, 44.32, 49.84, 55.03, 60.56, 65.87, 71.38, 76.81, 82.34, 87.42],
+    37: [11.58, 17.37, 24.22, 28.95, 35.40, 41.09, 46.76, 52.56, 57.90, 63.71, 69.48, 75.27, 80.86, 86.66, 92.23],
+    38: [12.16, 18.23, 25.44, 30.38, 37.26, 43.38, 49.21, 55.29, 60.77, 66.55, 73.10, 79.15, 84.90, 90.97, 97.04],
+    39: [12.73, 19.09, 26.65, 31.81, 39.12, 45.67, 51.65, 58.01, 63.64, 69.84, 76.73, 83.02, 88.94, 95.32, 101.83],
+    40: [13.30, 19.95, 27.85, 33.24, 40.98, 47.96, 54.10, 60.74, 66.48, 73.13, 80.36, 86.89, 93.03, 99.66, 106.61],
+    41: [15.04, 22.57, 31.45, 37.60, 46.16, 54.00, 60.91, 68.41, 74.40, 82.72, 90.44, 97.14, 104.46, 112.76, 120.96],
+    42: [16.79, 25.20, 35.05, 41.95, 51.34, 60.05, 67.72, 76.09, 82.32, 92.31, 100.51, 107.38, 115.89, 125.86, 135.31],
+    43: [18.53, 27.83, 38.66, 46.32, 56.51, 66.09, 74.54, 83.76, 90.24, 101.90, 110.59, 117.63, 127.33, 138.96, 149.65],
+    44: [20.27, 30.45, 42.27, 50.68, 61.69, 72.14, 81.35, 91.43, 98.16, 111.51, 120.68, 127.88, 138.76, 152.06, 163.00],
+    45: [22.02, 33.03, 45.88, 55.04, 66.87, 78.18, 88.17, 99.09, 110.10, 121.11, 130.76, 143.13, 154.14, 165.16, 173.35],
+    46: [23.70, 35.55, 49.42, 59.25, 71.99, 83.28, 94.93, 106.68, 118.52, 130.26, 140.74, 153.71, 165.55, 177.40, 186.56],
+    47: [25.37, 38.07, 52.95, 63.46, 77.12, 88.38, 101.68, 114.27, 126.95, 139.42, 150.73, 164.30, 176.97, 189.63, 199.77],
+    48: [27.04, 40.60, 56.49, 67.67, 82.25, 93.47, 108.44, 121.86, 135.63, 148.58, 160.71, 174.89, 188.39, 201.87, 212.99],
+    49: [28.72, 43.12, 60.03, 71.88, 87.38, 98.57, 115.21, 129.45, 144.31, 157.85, 170.70, 185.47, 199.78, 214.10, 226.20],
+    50: [30.44, 45.65, 63.57, 76.09, 93.07, 108.67, 121.98, 137.04, 152.19, 167.13, 180.69, 196.03, 211.18, 226.34, 239.41],
+    51: [35.69, 53.52, 73.56, 89.21, 107.55, 126.61, 141.14, 160.64, 178.43, 196.25, 209.98, 230.64, 248.33, 266.13, 272.85],
+    52: [40.94, 61.39, 83.55, 102.33, 122.04, 144.54, 160.30, 184.24, 204.66, 225.36, 239.26, 265.26, 285.48, 305.92, 306.28],
+    53: [46.18, 69.27, 93.54, 115.44, 136.52, 162.48, 179.46, 207.83, 230.90, 254.48, 268.55, 299.88, 322.64, 345.71, 339.70],
+    54: [51.43, 77.14, 103.53, 128.56, 151.01, 180.42, 198.62, 231.43, 257.13, 283.09, 297.84, 334.50, 359.79, 385.49, 373.15],
+    55: [56.67, 85.01, 113.53, 141.68, 165.45, 198.35, 217.78, 255.03, 283.37, 311.70, 322.13, 369.07, 396.93, 425.27, 426.60],
+    56: [59.65, 89.47, 120.36, 149.12, 175.45, 208.76, 231.85, 268.81, 298.24, 328.06, 341.41, 387.87, 417.71, 447.53, 455.75],
+    57: [62.62, 93.94, 127.18, 156.56, 185.45, 219.17, 245.92, 282.60, 313.12, 344.41, 360.68, 406.67, 438.50, 469.79, 484.91],
+    58: [65.60, 98.40, 134.01, 164.00, 195.44, 229.59, 259.99, 296.38, 327.99, 360.75, 379.95, 425.47, 459.29, 492.05, 514.06],
+    59: [68.57, 102.86, 140.83, 171.43, 205.44, 240.00, 272.56, 310.17, 342.86, 377.10, 399.22, 444.27, 480.07, 514.32, 543.21],
+    60: [71.55, 107.32, 147.65, 178.86, 215.44, 250.41, 283.14, 321.95, 357.73, 393.50, 418.54, 465.04, 500.82, 536.59, 572.36],
+}
+
+PRIMA_ING_DF = pd.DataFrame.from_dict(PREMIAS_ING, orient="index", columns=CAPITALS_ING).sort_index()
+PRIMA_ING_DF.index.name = "Edad"
+
+def _lerp(x0, x1, y0, y1, x):
+    if x0 == x1:
+        return float(y0)
+    return float(y0 + (y1 - y0) * (x - x0) / (x1 - x0))
+
+def prima_orientativa_ing(edad: float, capital: float, df: pd.DataFrame) -> float:
+    """Interpolación bilineal (edad x capital). Extrapola por el último tramo si se sale del rango."""
+    ages = df.index.to_numpy(dtype=float)
+    caps = np.array(df.columns, dtype=float)
+
+    if edad <= ages.min():
+        a0, a1 = ages[0], ages[1]
+    elif edad >= ages.max():
+        a0, a1 = ages[-2], ages[-1]
+    else:
+        a1 = ages[ages >= edad].min()
+        a0 = ages[ages <= edad].max()
+
+    if capital <= caps.min():
+        c0, c1 = caps[0], caps[1]
+    elif capital >= caps.max():
+        c0, c1 = caps[-2], caps[-1]
+    else:
+        c1 = caps[caps >= capital].min()
+        c0 = caps[caps <= capital].max()
+
+    v_a0c0 = float(df.loc[int(a0), int(c0)])
+    v_a0c1 = float(df.loc[int(a0), int(c1)])
+    v_a1c0 = float(df.loc[int(a1), int(c0)])
+    v_a1c1 = float(df.loc[int(a1), int(c1)])
+
+    v0 = _lerp(c0, c1, v_a0c0, v_a0c1, capital)
+    v1 = _lerp(c0, c1, v_a1c0, v_a1c1, capital)
+    v = _lerp(a0, a1, v0, v1, edad)
+    return float(v)
 
 # ----------------------------
 # PESTAÑAS
@@ -383,7 +474,7 @@ with tab_simulador:
     st.caption("Notas: Este simulador no contempla comisiones, seguros ni variaciones de tipo de interés.")
 
 # =========
-# TAB 1bis: Estudio Bonificaciones (Mi hipoteca + bonificaciones)
+# TAB 2: Estudio Bonificaciones
 # =========
 with tab_bonif:
     st.markdown(
@@ -413,7 +504,7 @@ with tab_bonif:
                 min_value=0.0, max_value=30.0, value=3.0, step=0.05, format="%.2f", key="r_bon"
             )
         with c4:
-            start_month_b = st.selectbox(
+            _ = st.selectbox(
                 "Mes de inicio (agrupación anual)",
                 options=list(range(1, 13)), index=0, format_func=lambda m: f"{m:02d}", key="m_bon"
             )
@@ -421,8 +512,8 @@ with tab_bonif:
 
     n_months_b = years_b * 12
     r_monthly_b = (annual_rate_pct_b / 100.0) / 12.0
-
     df_base = amortization_schedule(principal_b, r_monthly_b, n_months_b)
+
     if df_base.empty:
         st.warning("Introduce un importe y un plazo válidos.")
         st.stop()
@@ -476,7 +567,6 @@ with tab_bonif:
 
     r_monthly_bonif = (annual_rate_bonif / 100.0) / 12.0
     df_bon = amortization_schedule(principal_b, r_monthly_bonif, n_months_b)
-
     monthly_payment_bon = float(df_bon["Cuota"].iloc[0]) if not df_bon.empty else 0.0
 
     ahorro_cuota_mes = monthly_payment_base - monthly_payment_bon
@@ -502,10 +592,8 @@ with tab_bonif:
 
     a1, a2, a3 = st.columns(3)
 
-    # 1) Se queda en el mismo sitio
     a1.metric("💳 Cuota mensual (bonificada)", eur(monthly_payment_bon), delta=eur(-ahorro_cuota_mes))
 
-    # 2) Caja verde aplicada al "Ahorro mensual" (sin moverlo)
     with a2:
         st.markdown(
             f"""
@@ -523,7 +611,6 @@ with tab_bonif:
             unsafe_allow_html=True
         )
 
-    # 3) Ahorro anual normal
     a3.metric("📆 Ahorro anual", eur(ahorro_anual))
 
     st.caption(
@@ -531,11 +618,68 @@ with tab_bonif:
         "No incluye el coste de los seguros/bonificaciones ni otros gastos/comisiones."
     )
 
+    # -------------------------
+    # Prima orientativa (ING)
+    # -------------------------
+    st.divider()
+
+    st.markdown(
+        """
+        <div class="param-header">
+          <span class="param-chip">Prima orientativa</span>
+          <span class="param-subtle">
+            Calculo orientativo de prima en base a capital y edad calculado a <strong>03/12/2025</strong> referente a primas de <strong>ING</strong>
+          </span>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+    cP1, cP2 = st.columns(2)
+    with cP1:
+        edad_ing = st.number_input(
+            "Edad (años)",
+            min_value=0, max_value=99, value=30, step=1, key="edad_ing_prima"
+        )
+    with cP2:
+        capital_ing = st.number_input(
+            "Capital a cubrir (€)",
+            min_value=0.0, max_value=1000000.0, value=100000.0, step=5000.0, format="%.0f", key="capital_ing_prima"
+        )
+
+    if capital_ing > 400000 or edad_ing > 65:
+        st.warning("Nota que son calculos oreintativos y pueden no ser acordes a partir de 400.000 euros y edades mayores de 65 años")
+
+    if edad_ing <= 0 or capital_ing <= 0:
+        st.info("Introduce una edad y un capital válidos para obtener la prima orientativa.")
+    else:
+        prima_estimada = prima_orientativa_ing(float(edad_ing), float(capital_ing), PRIMA_ING_DF)
+
+        st.markdown(
+            f"""
+            <div style="
+                background:#e8f0fe;
+                border:1px solid #4A90E2;
+                border-radius:12px;
+                padding:1rem 1.25rem;
+                margin:.5rem 0 0.25rem 0;
+            ">
+              <div class="value-title">🧾 Prima orientativa (mensual)</div>
+              <div class="value-big">{eur(prima_estimada)}</div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+        st.caption(
+            "Nota: estimación basada en interpolación lineal por edad y capital sobre la matriz interna. "
+            "No contempla condiciones de suscripción, salud, profesión, coberturas adicionales, ni promociones."
+        )
+
 # ==========================
-# TAB 2: Comparador Fija vs Mixta
+# TAB 3: Comparador Fija vs Mixta
 # ==========================
 with tab_comparador:
-    # --- Parámetros base (FIJA) ---
     st.markdown(
         """
         <div class="param-header">
@@ -561,7 +705,7 @@ with tab_comparador:
                 min_value=0.0, max_value=30.0, value=3.0, step=0.05, format="%.2f", key="rfix_cmp"
             )
         with c4b:
-            start_month_cmp = st.selectbox(
+            _ = st.selectbox(
                 "Mes de inicio (opcional, para agrupación anual)",
                 options=list(range(1, 13)), index=0, format_func=lambda m: f"{m:02d}", key="m_cmp"
             )
@@ -570,7 +714,6 @@ with tab_comparador:
     n_cmp = Y_cmp * 12
     rfix_m = (Rfix_cmp / 100.0) / 12.0
 
-    # --- Parámetros de la MIXTA ---
     st.markdown(
         """
         <div class="param-header">
@@ -595,17 +738,14 @@ with tab_comparador:
             )
         _ = st.form_submit_button("🧮 Calcular interés necesario del periodo 2 (variable)")
 
-    # --- Cálculo comparador ---
     if P_cmp <= 0 or n_cmp <= 0:
         st.warning("Introduce un importe y un plazo válidos.")
         st.stop()
 
-    # Fija
     df_fix_cmp = amortization_schedule(P_cmp, rfix_m, n_cmp)
     total_interest_fixed = float(df_fix_cmp["Intereses"].sum())
     monthly_payment_fixed = float(df_fix_cmp["Cuota"].iloc[0])
 
-    # Mixta - resolver r2
     m1_months = Y_change * 12
     r1_m = (R1_mixed / 100.0) / 12.0
     r2_m_solution, tgt_fixed, mixed_total, i_p1, i_p2 = solve_r2_for_equal_interest(
@@ -619,8 +759,8 @@ with tab_comparador:
 
     st.divider()
 
-    # Preparar cuotas de mixta
     n2 = max(n_cmp - m1_months, 0)
+
     if r1_m == 0:
         cuota_p1 = P_cmp / n_cmp
     else:
@@ -714,10 +854,7 @@ with tab_comparador:
             P_cmp + tgt_fixed
         ]
     })
-    st.dataframe(
-        fija_df.style.format({"Valor": eur}),
-        use_container_width=True
-    )
+    st.dataframe(fija_df.style.format({"Valor": eur}), use_container_width=True)
 
     st.markdown("### 🧩 Resumen — Hipoteca Mixta")
     mixta_df = pd.DataFrame({
@@ -749,7 +886,7 @@ with tab_comparador:
     st.caption(f"Diferencia (mixta - fija): {eur(diff)} (≈ 0 si la solución iguala los intereses).")
 
 # =========
-# TAB 3: Publicidad (solo imagen local)
+# TAB 4: Publicidad (solo imagen local)
 # =========
 with tab_publicidad:
     st.markdown("<div style='text-align:center'>", unsafe_allow_html=True)
@@ -757,10 +894,9 @@ with tab_publicidad:
     st.markdown("</div>", unsafe_allow_html=True)
 
 # =========
-# TAB 4: Analiza Inversión
+# TAB 5: Analiza Inversión
 # =========
 with tab_inversion:
-    # --- Apartado 1: Hipoteca sobre inversión ---
     st.markdown(
         """
         <div class="param-header">
@@ -943,10 +1079,7 @@ with tab_inversion:
     })
 
     with st.expander("📘 Resumen — Aportación Inicial", expanded=False):
-        st.dataframe(
-            resumen_df.style.format({"Importe": eur}),
-            use_container_width=True
-        )
+        st.dataframe(resumen_df.style.format({"Importe": eur}), use_container_width=True)
 
     st.caption(
         "Nota: Gastos fijos asumidos: Registro y Notaría = 1500 €, Tasación = 400 €, Gestoría = 400 €. "
@@ -1040,17 +1173,17 @@ with tab_inversion:
         unsafe_allow_html=True
     )
 
-    default_horizonte = int(plazo_inv) if 'plazo_inv' in locals() else 5
+    default_horizonte = int(plazo_inv)
     horizonte_anios = st.number_input(
         "Horizonte (años) para comparar el interés compuesto",
         min_value=1, max_value=40, value=default_horizonte, step=1, key="horizonte_comp"
     )
 
-    r_simple = 0.0 if (aportacion_total is None or aportacion_total <= 0) else (cashflow_anual / aportacion_total)
+    r_simple = 0.0 if (aportacion_total <= 0) else (cashflow_anual / aportacion_total)
     r_comp = ((1 + horizonte_anios * r_simple) ** (1 / horizonte_anios)) - 1
 
     def fmt_pct(x: float) -> str:
-        return f"{x*100:,.2f} %".replace(".", ",")
+        return f"{x*100:,.2f} %".replace(".", ",").replace(",", "X").replace("X", ".")
 
     c1, c2 = st.columns(2)
 
@@ -1087,7 +1220,7 @@ with tab_inversion:
               <div class="value-title">📈 Interés compuesto equivalente</div>
               <div class="value-big">{fmt_pct(r_comp)}</div>
               <div style="font-size:0.9em;color:#5f6570;margin-top:.35rem">
-                Tasa anual constante que, durante {horizonte_anios} año(s), genera el mismo beneficio que una
+                Tasa anual constante que, durante {int(horizonte_anios)} año(s), genera el mismo beneficio que una
                 rentabilidad simple de {fmt_pct(r_simple)}. (Fórmula: <em>((1 + n·r)<sup>1/n</sup> − 1)</em>).<br/>
                 También conocida como <strong>Tasa Anual Equivalente (TAE) de la inversión</strong>.
               </div>
@@ -1097,25 +1230,21 @@ with tab_inversion:
         )
 
     n_h = int(horizonte_anios)
-    years = list(range(1, n_h + 1))
+    years_list = list(range(1, n_h + 1))
 
     def comp_equiv(r: float, n: int) -> float:
         base = 1 + n * r
         return (base ** (1 / n) - 1) if base > 0 else np.nan
 
     df_ratios = pd.DataFrame({
-        "Año": years,
+        "Año": years_list,
         "Rentabilidad sobre aportación (Cash-on-Cash)": [r_simple] * n_h,
-        "Interés compuesto equivalente": [comp_equiv(r_simple, n) for n in years],
+        "Interés compuesto equivalente": [comp_equiv(r_simple, n) for n in years_list],
     })
 
     df_display = df_ratios.copy()
-    df_display["Rentabilidad sobre aportación (Cash-on-Cash)"] = df_display[
-        "Rentabilidad sobre aportación (Cash-on-Cash)"
-    ].map(fmt_pct)
-    df_display["Interés compuesto equivalente"] = df_display[
-        "Interés compuesto equivalente"
-    ].map(fmt_pct)
+    df_display["Rentabilidad sobre aportación (Cash-on-Cash)"] = df_display["Rentabilidad sobre aportación (Cash-on-Cash)"].map(fmt_pct)
+    df_display["Interés compuesto equivalente"] = df_display["Interés compuesto equivalente"].map(fmt_pct)
 
     with st.expander("🔍 Comparativa por año (simple vs compuesto)", expanded=False):
         st.dataframe(df_display, use_container_width=True, hide_index=True)
