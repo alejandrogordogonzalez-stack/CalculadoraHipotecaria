@@ -722,14 +722,14 @@ with tab_bonif:
             💡 Antes de comparar bonificaciones…
           </div>
           <div style="font-size:.98rem; line-height:1.45; color:#5f6570;">
-            ¿Sabías que los seguros que firmas bonificados suelen ser entre un <strong>30%–40% más caros</strong>
+            ¿Sabía que los seguros que firma bonificados suelen ser entre un <strong>30%–40% más caros</strong>
             que los que no son contratados a través del banco?<br/><br/>
             Además, los seguros de vida <strong>suben con el paso del tiempo</strong>, pero la bonificación se mantiene
             <strong>estable</strong>. Por eso, esta diferencia puede hacer que merezca la pena contratar el seguro
             <strong>por fuera de la entidad bancaria</strong>.<br/><br/>
-            A continuación, verás una <strong>prima orientativa</strong> de lo que costaría con una entidad bancaria como <strong>ING</strong>.
-            Y si quieres saber cuánto podríamos mejorarlo para evaluar si esta bonificación merece la pena,
-            <strong>no dudes en contactar con nuestro equipo</strong>.
+            A continuación, verá una <strong>prima orientativa</strong> de lo que costaría con una entidad bancaria como <strong>ING</strong>.
+            Y si quiere saber cuánto podríamos mejorarlo para evaluar si esta bonificación merece la pena,
+            <strong>no dude en contactar con nuestro equipo</strong>.
           </div>
         </div>
         """,
