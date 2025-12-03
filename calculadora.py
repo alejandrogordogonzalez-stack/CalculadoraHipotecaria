@@ -383,14 +383,16 @@ with tab_simulador:
     st.caption("Notas: Este simulador no contempla comisiones, seguros ni variaciones de tipo de interés.")
 
 # =========
-# TAB 1bis: Estudio Bonificaciones (copia de Simulador + bonificaciones)
+# TAB 1bis: Estudio Bonificaciones (Mi hipoteca + bonificaciones)
 # =========
 with tab_bonif:
     st.markdown(
         """
         <div class="param-header">
-          <span class="param-chip">Parámetros</span>
-          <span class="param-subtle">Simula tu hipoteca y luego aplica bonificaciones para ver el ahorro en €.</span>
+          <span class="param-chip">Mi hipoteca</span>
+          <span class="param-subtle">
+            Estos parámetros son <strong>los de mi hipoteca</strong> (sin bonificaciones) y sirven como referencia.
+          </span>
         </div>
         """,
         unsafe_allow_html=True
@@ -425,12 +427,11 @@ with tab_bonif:
         st.warning("Introduce un importe y un plazo válidos.")
         st.stop()
 
-    total_interest_base = float(df_base["Intereses"].sum())
     monthly_payment_base = float(df_base["Cuota"].iloc[0])
 
     m1c, m2c, m3c = st.columns(3)
     m1c.metric("💳 Cuota mensual (sin bonificar)", eur(monthly_payment_base))
-    m2c.metric("💡 Intereses totales (sin bonificar)", eur(total_interest_base))
+    m2c.metric("📌 TIN anual (sin bonificar)", f"{annual_rate_pct_b:.2f} %")
     m3c.metric("🗓️ Nº de cuotas (meses)", f"{n_months_b}")
 
     st.divider()
@@ -440,8 +441,8 @@ with tab_bonif:
         <div class="param-header">
           <span class="param-chip">Bonificaciones</span>
           <span class="param-subtle">
-            Introduce bonificaciones en <strong>puntos porcentuales</strong> sobre el TIN
-            (ej.: <strong>0,15</strong> significa <strong>-0,15%</strong>).
+            Introduce bonificaciones en <strong>puntos porcentuales</strong> sobre el TIN.
+            Ejemplo: <strong>0,15</strong> significa que el TIN baja <strong>0,15%</strong>.
           </span>
         </div>
         """,
@@ -452,12 +453,12 @@ with tab_bonif:
         b1, b2, b3 = st.columns(3)
         with b1:
             bon_hogar = st.number_input(
-                "Bonificación aplicada por seguro de hogar (%)",
+                "Bonificación por seguro de hogar (%)",
                 min_value=0.0, max_value=5.0, value=0.0, step=0.01, format="%.2f", key="bon_hogar"
             )
         with b2:
             bon_vida = st.number_input(
-                "Bonificación aplicada por seguro de vida (%)",
+                "Bonificación por seguro de vida (%)",
                 min_value=0.0, max_value=5.0, value=0.0, step=0.01, format="%.2f", key="bon_vida"
             )
         with b3:
@@ -465,21 +466,23 @@ with tab_bonif:
                 "Otras bonificaciones (%)",
                 min_value=0.0, max_value=10.0, value=0.0, step=0.01, format="%.2f", key="bon_otras"
             )
-        _ = st.form_submit_button("🧮 Calcular ahorro con bonificaciones")
+        _ = st.form_submit_button("🧮 Calcular ahorro")
 
     bon_total = float(bon_hogar + bon_vida + bon_otras)
     annual_rate_bonif = max(float(annual_rate_pct_b - bon_total), 0.0)
-    r_monthly_bonif = (annual_rate_bonif / 100.0) / 12.0
 
+    if bon_total > annual_rate_pct_b:
+        st.warning("La bonificación total supera el TIN: el TIN bonificado se ha limitado a 0,00%.")
+
+    r_monthly_bonif = (annual_rate_bonif / 100.0) / 12.0
     df_bon = amortization_schedule(principal_b, r_monthly_bonif, n_months_b)
-    total_interest_bon = float(df_bon["Intereses"].sum()) if not df_bon.empty else 0.0
+
     monthly_payment_bon = float(df_bon["Cuota"].iloc[0]) if not df_bon.empty else 0.0
 
-    ahorro_intereses = total_interest_base - total_interest_bon
     ahorro_cuota_mes = monthly_payment_base - monthly_payment_bon
-    ahorro_total_pagado = (principal_b + total_interest_base) - (principal_b + total_interest_bon)
+    ahorro_anual = ahorro_cuota_mes * 12
+    ahorro_total_cuotas = ahorro_cuota_mes * n_months_b  # ahorro acumulado estimado (suma de cuotas)
 
-    # Resultados
     st.markdown(
         f"""
         <div style="
@@ -490,7 +493,9 @@ with tab_bonif:
             margin:.5rem 0 1rem 0;
         ">
           <div class="value-title">✅ TIN tras bonificaciones</div>
-          <div class="value-big">{annual_rate_bonif:.2f} % (bonificación total: {bon_total:.2f} %)</div>
+          <div class="value-big">{annual_rate_bonif:.2f} % <span style="font-size:.9rem;color:#5f6570;font-weight:600">
+            (bonificación total: {bon_total:.2f} %)
+          </span></div>
         </div>
         """,
         unsafe_allow_html=True
@@ -498,70 +503,61 @@ with tab_bonif:
 
     a1, a2, a3 = st.columns(3)
     a1.metric("💳 Cuota mensual (bonificada)", eur(monthly_payment_bon), delta=eur(-ahorro_cuota_mes))
-    a2.metric("💡 Intereses totales (bonificada)", eur(total_interest_bon), delta=eur(-ahorro_intereses))
-    a3.metric("💰 Ahorro total en € (intereses)", eur(ahorro_intereses))
+    a2.metric("🧾 Ahorro mensual", eur(ahorro_cuota_mes))
+    a3.metric("📆 Ahorro anual", eur(ahorro_anual))
+
+    st.markdown(
+        f"""
+        <div style="
+            background:#e8f5e9;
+            border:1px solid #4caf50;
+            border-radius:12px;
+            padding:1rem 1.25rem;
+            margin:.25rem 0 1rem 0;
+        ">
+          <div class="value-title">🏁 Ahorro total estimado (suma de cuotas en todo el plazo)</div>
+          <div class="value-big">{eur(ahorro_total_cuotas)}</div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
 
     comp_df = pd.DataFrame({
         "Concepto": [
             "TIN anual",
             "Cuota mensual",
-            "Intereses totales",
-            "Total pagado (capital + intereses)",
+            "Ahorro mensual",
+            "Ahorro anual",
+            "Ahorro total estimado (suma de cuotas)",
         ],
         "Sin bonificar": [
             f"{annual_rate_pct_b:.2f} %",
             monthly_payment_base,
-            total_interest_base,
-            principal_b + total_interest_base,
+            0.0,
+            0.0,
+            0.0,
         ],
         "Bonificada": [
             f"{annual_rate_bonif:.2f} %",
             monthly_payment_bon,
-            total_interest_bon,
-            principal_b + total_interest_bon,
-        ],
-        "Diferencia (€)": [
-            "—",
             ahorro_cuota_mes,
-            ahorro_intereses,
-            ahorro_total_pagado,
-        ]
+            ahorro_anual,
+            ahorro_total_cuotas,
+        ],
     })
 
     st.dataframe(
         comp_df.style.format({
             "Sin bonificar": lambda x: x if isinstance(x, str) else eur(x),
             "Bonificada": lambda x: x if isinstance(x, str) else eur(x),
-            "Diferencia (€)": lambda x: x if isinstance(x, str) else eur(x),
         }),
         use_container_width=True
     )
 
-    # Visual rápido: intereses sin vs con
-    cmp_bar = go.Figure()
-    cmp_bar.add_trace(go.Bar(name="Sin bonificar", x=["Intereses totales"], y=[total_interest_base]))
-    cmp_bar.add_trace(go.Bar(name="Bonificada", x=["Intereses totales"], y=[total_interest_bon]))
-    cmp_bar.update_layout(
-        barmode="group",
-        title="Comparativa — Intereses totales",
-        yaxis_title="€"
+    st.caption(
+        "Nota: aquí medimos el ahorro como reducción de cuota por la bajada del TIN. "
+        "No incluye el coste de los seguros/bonificaciones ni otros gastos/comisiones."
     )
-    st.plotly_chart(cmp_bar, use_container_width=True)
-
-    with st.expander("Ver detalle (primeras 12 cuotas) — Sin bonificar vs Bonificada"):
-        cL, cR = st.columns(2)
-        with cL:
-            st.markdown("**Sin bonificar**")
-            st.dataframe(df_base.head(12).style.format(
-                {"Cuota": eur, "Intereses": eur, "Amortización": eur, "Saldo final": eur}
-            ))
-        with cR:
-            st.markdown("**Bonificada**")
-            st.dataframe(df_bon.head(12).style.format(
-                {"Cuota": eur, "Intereses": eur, "Amortización": eur, "Saldo final": eur}
-            ))
-
-    st.caption("Nota: el ahorro mostrado es puramente financiero por bajada de TIN. No incluye el coste de los seguros/bonificaciones.")
 
 # ==========================
 # TAB 2: Comparador Fija vs Mixta
