@@ -1,3 +1,4 @@
+import re
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
@@ -15,7 +16,7 @@ st.caption(
 )
 
 # ----------------------------
-# ESTILOS (Tabs + Parámetros sticky + caja gris + valores grandes)
+# ESTILOS (Tabs + Parámetros sticky + caja gris + valores grandes + footer)
 # ----------------------------
 st.markdown(
     """
@@ -87,7 +88,7 @@ st.markdown(
         font-weight: 700;
     }
 
-    /* Caja gris suave para resaltar el interés del periodo 2 */
+    /* Caja gris suave */
     .soft-box {
         background: #f2f3f5;
         border: 1px solid #e1e3e8;
@@ -107,6 +108,25 @@ st.markdown(
         font-weight: 800;
         line-height: 1.1;
     }
+
+    /* ===== Footer ===== */
+    .app-footer {
+        margin-top: 1.8rem;
+        padding: .9rem 1rem;
+        background: #f5f7fa;
+        border: 1px solid #e6e9ef;
+        border-radius: 14px;
+        box-shadow: 0 6px 18px rgba(0,0,0,0.05);
+        color: #5f6570;
+        font-size: .92rem;
+        text-align: center;
+    }
+    .app-footer a {
+        color: #4A90E2;
+        text-decoration: none;
+        font-weight: 700;
+    }
+    .app-footer a:hover { text-decoration: underline; }
 
     /* ===== Fix responsive tabs (móvil) ===== */
     @media (max-width: 640px) {
@@ -130,15 +150,6 @@ st.markdown(
         padding: .75rem .9rem;
         margin-bottom: .75rem;
       }
-    }
-    .stTabs [role="tablist"]::-webkit-scrollbar { height: 6px; }
-    .stTabs [role="tablist"]::-webkit-scrollbar-thumb {
-      border-radius: 999px;
-      background: #cdd6e1;
-    }
-
-    /* ===== Uniformar métricas en móvil ===== */
-    @media (max-width: 640px) {
       .soft-box {
         background: transparent !important;
         border: none !important;
@@ -148,18 +159,89 @@ st.markdown(
         margin-top: .35rem;
       }
     }
+    .stTabs [role="tablist"]::-webkit-scrollbar { height: 6px; }
+    .stTabs [role="tablist"]::-webkit-scrollbar-thumb {
+      border-radius: 999px;
+      background: #cdd6e1;
+    }
     </style>
     """,
     unsafe_allow_html=True
 )
 
 # ============================
-# Utilidades
+# Helpers: formato ES (miles "." y decimal ",")
 # ============================
-def eur(x: float) -> str:
-    s = f"{x:,.2f} €"
-    return s.replace(",", "X").replace(".", ",").replace("X", ".")
+def fmt_number_es(x: float, decimals: int = 2) -> str:
+    s = f"{float(x):,.{decimals}f}"  # US: 1,234.56
+    return s.replace(",", "X").replace(".", ",").replace("X", ".")  # ES: 1.234,56
 
+def eur(x: float) -> str:
+    return f"{fmt_number_es(x, 2)} €"
+
+def parse_number_es(s: str):
+    """Acepta '150.000', '150000', '150.000,50', '150000,50', '150000.50', etc."""
+    if s is None:
+        return None
+    s = str(s).strip()
+    if s == "":
+        return None
+    s = s.replace("€", "").replace(" ", "")
+    s = re.sub(r"[^0-9,.\-]", "", s)
+
+    if "," in s:
+        # Asumimos "," decimal (ES). Quitamos miles con "."
+        s = s.replace(".", "").replace(",", ".")
+    else:
+        # Solo puntos o nada. Si el último grupo tiene 3 dígitos, asumimos miles.
+        if "." in s:
+            parts = s.split(".")
+            if len(parts[-1]) == 3 and len(parts) > 1:
+                s = s.replace(".", "")
+            # si no, asumimos "." decimal (ya está bien)
+
+    try:
+        return float(s)
+    except Exception:
+        return None
+
+def euro_input(label: str, key: str, default: float, decimals: int = 2,
+               min_value: float | None = None, max_value: float | None = None, help_text: str | None = None) -> float:
+    raw = st.text_input(
+        label,
+        value=fmt_number_es(default, decimals),
+        key=key,
+        help=help_text or "Ejemplo: 150.000 o 150.000,50"
+    )
+    val = parse_number_es(raw)
+    if val is None:
+        st.caption(f"⚠️ Formato no válido. Usando {fmt_number_es(default, decimals)}.")
+        val = float(default)
+
+    if min_value is not None:
+        val = max(val, float(min_value))
+    if max_value is not None:
+        val = min(val, float(max_value))
+
+    return float(val)
+
+def render_footer():
+    st.markdown(
+        """
+        <div class="app-footer">
+          <div><strong>Desarrollado por Alejandro Gordo</strong></div>
+          <div>
+            En caso de necesitar asesoramiento gratuito o una cotización de mi equipo, no duden en escribir a
+            <a href="mailto:alejandro.gordo@nnespana.com">alejandro.gordo@nnespana.com</a>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+# ============================
+# Utilidades amortización
+# ============================
 def amortization_schedule(P: float, r_m: float, n: int) -> pd.DataFrame:
     """Cuadro de amortización con tipo mensual constante r_m durante n meses."""
     if P <= 0 or n <= 0:
@@ -206,7 +288,6 @@ def mixed_total_interest(P: float, n: int, r1_m: float, m1: int, r2_m: float):
     if P <= 0 or n <= 0 or m1 < 0 or m1 > n:
         return 0.0, 0.0, 0.0, P
 
-    # Periodo 1
     if r1_m == 0:
         payment1 = P / n
     else:
@@ -224,7 +305,6 @@ def mixed_total_interest(P: float, n: int, r1_m: float, m1: int, r2_m: float):
     if n2 <= 0:
         return interest_p1, interest_p1, 0.0, 0.0
 
-    # Periodo 2
     if r2_m == 0:
         payment2 = balance / n2
     else:
@@ -402,9 +482,12 @@ with tab_simulador:
     with st.form("params_form_sim", clear_on_submit=False):
         c1, c2, c3, c4 = st.columns([1.2, 1, 1, 1])
         with c1:
-            principal = st.number_input(
-                "Importe a financiar (Cantidad solicitada)",
-                min_value=1000.0, value=150000.0, step=1000.0, format="%.2f", key="p_sim"
+            principal = euro_input(
+                "Importe a financiar (Cantidad solicitada) (€)",
+                key="p_sim_eur",
+                default=150000.0,
+                decimals=2,
+                min_value=1000.0
             )
         with c2:
             years = st.slider("Plazo (años)", min_value=1, max_value=40, value=25, step=1, key="y_sim")
@@ -422,8 +505,8 @@ with tab_simulador:
 
     n_months = years * 12
     r_monthly = (annual_rate_pct / 100.0) / 12.0
-
     df = amortization_schedule(principal, r_monthly, n_months)
+
     if df.empty:
         st.warning("Introduce un importe y un plazo válidos.")
         st.stop()
@@ -472,6 +555,7 @@ with tab_simulador:
         )
 
     st.caption("Notas: Este simulador no contempla comisiones, seguros ni variaciones de tipo de interés.")
+    render_footer()
 
 # =========
 # TAB 2: Estudio Bonificaciones
@@ -492,9 +576,12 @@ with tab_bonif:
     with st.form("params_form_bonif", clear_on_submit=False):
         c1, c2, c3, c4 = st.columns([1.2, 1, 1, 1])
         with c1:
-            principal_b = st.number_input(
-                "Importe a financiar (Cantidad solicitada)",
-                min_value=1000.0, value=150000.0, step=1000.0, format="%.2f", key="p_bon"
+            principal_b = euro_input(
+                "Importe a financiar (Cantidad solicitada) (€)",
+                key="p_bon_eur",
+                default=150000.0,
+                decimals=2,
+                min_value=1000.0
             )
         with c2:
             years_b = st.slider("Plazo (años)", min_value=1, max_value=40, value=25, step=1, key="y_bon")
@@ -628,7 +715,7 @@ with tab_bonif:
         <div class="param-header">
           <span class="param-chip">Prima orientativa</span>
           <span class="param-subtle">
-            Calculo orientativo de prima en base a capital y edad calculado a <strong>03/12/2025</strong> referente a primas de <strong>ING</strong> (Invalidez + Fallecimiento).
+            Calculo orientativo de prima en base a capital y edad calculado a <strong>03/12/2025</strong> referente a primas de <strong>ING</strong>
           </span>
         </div>
         """,
@@ -642,9 +729,13 @@ with tab_bonif:
             min_value=0, max_value=99, value=30, step=1, key="edad_ing_prima"
         )
     with cP2:
-        capital_ing = st.number_input(
+        capital_ing = euro_input(
             "Capital a cubrir (€)",
-            min_value=0.0, max_value=1000000.0, value=100000.0, step=5000.0, format="%.0f", key="capital_ing_prima"
+            key="capital_ing_prima_eur",
+            default=100000.0,
+            decimals=0,
+            min_value=0.0,
+            max_value=1000000.0
         )
 
     if capital_ing > 400000 or edad_ing > 65:
@@ -655,26 +746,15 @@ with tab_bonif:
     else:
         prima_estimada = prima_orientativa_ing(float(edad_ing), float(capital_ing), PRIMA_ING_DF)
 
-        st.markdown(
-            f"""
-            <div style="
-                background:#e8f0fe;
-                border:1px solid #4A90E2;
-                border-radius:12px;
-                padding:1rem 1.25rem;
-                margin:.5rem 0 0.25rem 0;
-            ">
-              <div class="value-title">🧾 Prima orientativa (mensual)</div>
-              <div class="value-big">{eur(prima_estimada)}</div>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
+        # ✅ Estilo como st.metric (sin tarjeta azul)
+        st.metric("🧾 Prima orientativa (mensual)", eur(prima_estimada))
 
         st.caption(
             "Nota: estimación basada en interpolación lineal por edad y capital sobre la matriz interna. "
             "No contempla condiciones de suscripción, salud, profesión, coberturas adicionales, ni promociones."
         )
+
+    render_footer()
 
 # ==========================
 # TAB 3: Comparador Fija vs Mixta
@@ -693,9 +773,12 @@ with tab_comparador:
     with st.form("params_form_cmp_base", clear_on_submit=False):
         c1b, c2b, c3b, c4b = st.columns([1.2, 1, 1, 1])
         with c1b:
-            P_cmp = st.number_input(
-                "Importe a financiar (Cantidad solicitada)",
-                min_value=1000.0, value=100000.0, step=1000.0, format="%.2f", key="p_cmp"
+            P_cmp = euro_input(
+                "Importe a financiar (Cantidad solicitada) (€)",
+                key="p_cmp_eur",
+                default=100000.0,
+                decimals=2,
+                min_value=1000.0
             )
         with c2b:
             Y_cmp = st.slider("Plazo (años)", min_value=1, max_value=40, value=20, step=1, key="y_cmp")
@@ -834,38 +917,21 @@ with tab_comparador:
                 unsafe_allow_html=True
             )
 
-    r2_for_table = r2_m_solution if r2_m_solution is not None else 0.0
-    mixed_total_chk, ip1_chk, ip2_chk, saldo_p1 = mixed_total_interest(
-        P_cmp, n_cmp, r1_m, m1_months, r2_for_table
-    )
-
     st.markdown("### 📘 Resumen — Hipoteca Fija")
     fija_df = pd.DataFrame({
-        "Concepto": [
-            "Cuota mensual a pagar",
-            "Valor Hipoteca",
-            "Intereses Totales",
-            "Suma Capital+Intereses"
-        ],
-        "Valor": [
-            monthly_payment_fixed,
-            P_cmp,
-            tgt_fixed,
-            P_cmp + tgt_fixed
-        ]
+        "Concepto": ["Cuota mensual a pagar", "Valor Hipoteca", "Intereses Totales", "Suma Capital+Intereses"],
+        "Valor": [monthly_payment_fixed, P_cmp, tgt_fixed, P_cmp + tgt_fixed]
     })
     st.dataframe(fija_df.style.format({"Valor": eur}), use_container_width=True)
 
     st.markdown("### 🧩 Resumen — Hipoteca Mixta")
+    r2_for_table = r2_m_solution if r2_m_solution is not None else 0.0
+    mixed_total_chk, ip1_chk, ip2_chk, _ = mixed_total_interest(P_cmp, n_cmp, r1_m, m1_months, r2_for_table)
     mixta_df = pd.DataFrame({
         "Concepto": [
-            "Cuota a pagar periodo 1",
-            "Cuota a pagar periodo 2",
-            "Intereses periodo 1",
-            "Intereses periodo 2",
-            "Valor Hipoteca",
-            "Intereses Totales",
-            "Suma Capital+Intereses"
+            "Cuota a pagar periodo 1", "Cuota a pagar periodo 2",
+            "Intereses periodo 1", "Intereses periodo 2",
+            "Valor Hipoteca", "Intereses Totales", "Suma Capital+Intereses"
         ],
         "Valor": [
             cuota_p1,
@@ -884,14 +950,16 @@ with tab_comparador:
 
     diff = mixed_total_chk - tgt_fixed
     st.caption(f"Diferencia (mixta - fija): {eur(diff)} (≈ 0 si la solución iguala los intereses).")
+    render_footer()
 
 # =========
-# TAB 4: Publicidad (solo imagen local)
+# TAB 4: Publicidad
 # =========
 with tab_publicidad:
     st.markdown("<div style='text-align:center'>", unsafe_allow_html=True)
     st.image("publi.jpg", use_container_width=True)
     st.markdown("</div>", unsafe_allow_html=True)
+    render_footer()
 
 # =========
 # TAB 5: Analiza Inversión
@@ -910,9 +978,12 @@ with tab_inversion:
     with st.form("params_form_inversion", clear_on_submit=False):
         c1, c2 = st.columns([1.2, 1])
         with c1:
-            precio_vivienda = st.number_input(
+            precio_vivienda = euro_input(
                 "Precio de la vivienda (€)",
-                min_value=10000.0, value=200000.0, step=1000.0, format="%.2f", key="precio_inv"
+                key="precio_inv_eur",
+                default=200000.0,
+                decimals=2,
+                min_value=10000.0
             )
         with c2:
             pct_financiacion = st.slider(
@@ -1006,21 +1077,24 @@ with tab_inversion:
     itp_text = _fmt_pct(itp * 100)
     ajd_text = _fmt_pct(ajd * 100)
 
-    registro_notaria = 1500
-    tasacion = 400
-    gestoria = 400
+    registro_notaria = 1500.0
+    tasacion = 400.0
+    gestoria = 400.0
     comision_apertura = importe_financiado * 0.02
 
-    aportacion_extra = st.number_input(
+    aportacion_extra = euro_input(
         "Aportación extra (reforma / otro concepto) (€)",
-        min_value=0.0, value=0.0, step=100.0, format="%.2f", key="aport_extra"
+        key="aport_extra_eur",
+        default=0.0,
+        decimals=2,
+        min_value=0.0
     )
 
     gastos_fijos = registro_notaria + tasacion + gestoria
     aportacion_total = entrada_eur + impuestos + gastos_fijos + comision_apertura + aportacion_extra
 
     cA, cB, cC = st.columns(3)
-    cA.metric("💰 Entrada", f"{entrada_pct:.1f}% = {eur(entrada_eur)}")
+    cA.metric("💰 Entrada", f"{fmt_number_es(entrada_pct, 1)}% = {eur(entrada_eur)}")
 
     with cB:
         st.markdown(
@@ -1082,7 +1156,7 @@ with tab_inversion:
         st.dataframe(resumen_df.style.format({"Importe": eur}), use_container_width=True)
 
     st.caption(
-        "Nota: Gastos fijos asumidos: Registro y Notaría = 1500 €, Tasación = 400 €, Gestoría = 400 €. "
+        "Nota: Gastos fijos asumidos: Registro y Notaría = 1.500 €, Tasación = 400 €, Gestoría = 400 €. "
         "La comisión de apertura es el 2% del importe financiado."
     )
 
@@ -1102,38 +1176,17 @@ with tab_inversion:
     with st.form("params_form_alquiler", clear_on_submit=False):
         c1, c2 = st.columns([1, 1])
         with c1:
-            alquiler_mensual = st.number_input(
-                "Alquiler mensual estimado (€)",
-                min_value=0.0, value=1000.0, step=50.0, format="%.2f", key="alq_mensual"
-            )
-            comunidad_mensual = st.number_input(
-                "Comunidad (mensual) (€)",
-                min_value=0.0, value=40.0, step=5.0, format="%.2f", key="comunidad_mensual"
-            )
-            seguros_mensual = st.number_input(
-                "Seguros (mensual) (€)",
-                min_value=0.0, value=60.0, step=10.0, format="%.2f", key="seguros_mensual"
-            )
+            alquiler_mensual = euro_input("Alquiler mensual estimado (€)", key="alq_mensual_eur", default=1000.0, decimals=2, min_value=0.0)
+            comunidad_mensual = euro_input("Comunidad (mensual) (€)", key="comunidad_mensual_eur", default=40.0, decimals=2, min_value=0.0)
+            seguros_mensual = euro_input("Seguros (mensual) (€)", key="seguros_mensual_eur", default=60.0, decimals=2, min_value=0.0)
         with c2:
-            ibi_anual = st.number_input(
-                "IBI (anual) (€)",
-                min_value=0.0, value=150.0, step=25.0, format="%.2f", key="ibi_anual"
-            )
-            mantenimiento_anual = st.number_input(
-                "Mantenimiento (anual) (€)",
-                min_value=0.0, value=0.0, step=50.0, format="%.2f", key="mnt_anual"
-            )
+            ibi_anual = euro_input("IBI (anual) (€)", key="ibi_anual_eur", default=150.0, decimals=2, min_value=0.0)
+            mantenimiento_anual = euro_input("Mantenimiento (anual) (€)", key="mnt_anual_eur", default=0.0, decimals=2, min_value=0.0)
         _ = st.form_submit_button("✅ Calcular cashflow")
 
     ingresos_anuales = alquiler_mensual * 12
     hipoteca_anual = float(cuota_mensual_inv) * 12
-
-    otros_gastos_anuales = (
-        ibi_anual +
-        comunidad_mensual * 12 +
-        mantenimiento_anual +
-        seguros_mensual * 12
-    )
+    otros_gastos_anuales = ibi_anual + comunidad_mensual * 12 + mantenimiento_anual + seguros_mensual * 12
     gastos_anuales_totales = otros_gastos_anuales + hipoteca_anual
     cashflow_anual = ingresos_anuales - gastos_anuales_totales
 
@@ -1173,17 +1226,16 @@ with tab_inversion:
         unsafe_allow_html=True
     )
 
-    default_horizonte = int(plazo_inv)
     horizonte_anios = st.number_input(
         "Horizonte (años) para comparar el interés compuesto",
-        min_value=1, max_value=40, value=default_horizonte, step=1, key="horizonte_comp"
+        min_value=1, max_value=40, value=int(plazo_inv), step=1, key="horizonte_comp"
     )
 
     r_simple = 0.0 if (aportacion_total <= 0) else (cashflow_anual / aportacion_total)
     r_comp = ((1 + horizonte_anios * r_simple) ** (1 / horizonte_anios)) - 1
 
     def fmt_pct(x: float) -> str:
-        return f"{x*100:,.2f} %".replace(".", ",").replace(",", "X").replace("X", ".")
+        return f"{fmt_number_es(x * 100, 2)} %"
 
     c1, c2 = st.columns(2)
 
@@ -1248,3 +1300,5 @@ with tab_inversion:
 
     with st.expander("🔍 Comparativa por año (simple vs compuesto)", expanded=False):
         st.dataframe(df_display, use_container_width=True, hide_index=True)
+
+    render_footer()
