@@ -290,8 +290,8 @@ def eur(x: float) -> str:
 # ----------------------------
 # PESTAÑAS
 # ----------------------------
-tab_simulador, tab_comparador, tab_publicidad, tab_inversion = st.tabs(
-    ["📊 Simulador", "📐 Comparador: Fija vs Mixta", "🖼️ Publicidad", "💹 Analiza Inversión"]
+tab_simulador, tab_bonif, tab_comparador, tab_publicidad, tab_inversion = st.tabs(
+    ["📊 Simulador", "🎁 Estudio Bonificaciones", "📐 Comparador: Fija vs Mixta", "🖼️ Publicidad", "💹 Analiza Inversión"]
 )
 
 # =========
@@ -382,6 +382,187 @@ with tab_simulador:
 
     st.caption("Notas: Este simulador no contempla comisiones, seguros ni variaciones de tipo de interés.")
 
+# =========
+# TAB 1bis: Estudio Bonificaciones (copia de Simulador + bonificaciones)
+# =========
+with tab_bonif:
+    st.markdown(
+        """
+        <div class="param-header">
+          <span class="param-chip">Parámetros</span>
+          <span class="param-subtle">Simula tu hipoteca y luego aplica bonificaciones para ver el ahorro en €.</span>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+    with st.form("params_form_bonif", clear_on_submit=False):
+        c1, c2, c3, c4 = st.columns([1.2, 1, 1, 1])
+        with c1:
+            principal_b = st.number_input(
+                "Importe a financiar (Cantidad solicitada)",
+                min_value=1000.0, value=150000.0, step=1000.0, format="%.2f", key="p_bon"
+            )
+        with c2:
+            years_b = st.slider("Plazo (años)", min_value=1, max_value=40, value=25, step=1, key="y_bon")
+        with c3:
+            annual_rate_pct_b = st.number_input(
+                "Interés aplicado (% TIN anual)",
+                min_value=0.0, max_value=30.0, value=3.0, step=0.05, format="%.2f", key="r_bon"
+            )
+        with c4:
+            start_month_b = st.selectbox(
+                "Mes de inicio (agrupación anual)",
+                options=list(range(1, 13)), index=0, format_func=lambda m: f"{m:02d}", key="m_bon"
+            )
+        _ = st.form_submit_button("✅ Aplicar parámetros")
+
+    n_months_b = years_b * 12
+    r_monthly_b = (annual_rate_pct_b / 100.0) / 12.0
+
+    df_base = amortization_schedule(principal_b, r_monthly_b, n_months_b)
+    if df_base.empty:
+        st.warning("Introduce un importe y un plazo válidos.")
+        st.stop()
+
+    total_interest_base = float(df_base["Intereses"].sum())
+    monthly_payment_base = float(df_base["Cuota"].iloc[0])
+
+    m1c, m2c, m3c = st.columns(3)
+    m1c.metric("💳 Cuota mensual (sin bonificar)", eur(monthly_payment_base))
+    m2c.metric("💡 Intereses totales (sin bonificar)", eur(total_interest_base))
+    m3c.metric("🗓️ Nº de cuotas (meses)", f"{n_months_b}")
+
+    st.divider()
+
+    st.markdown(
+        """
+        <div class="param-header">
+          <span class="param-chip">Bonificaciones</span>
+          <span class="param-subtle">
+            Introduce bonificaciones en <strong>puntos porcentuales</strong> sobre el TIN
+            (ej.: <strong>0,15</strong> significa <strong>-0,15%</strong>).
+          </span>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+    with st.form("params_form_bonif_inputs", clear_on_submit=False):
+        b1, b2, b3 = st.columns(3)
+        with b1:
+            bon_hogar = st.number_input(
+                "Bonificación aplicada por seguro de hogar (%)",
+                min_value=0.0, max_value=5.0, value=0.0, step=0.01, format="%.2f", key="bon_hogar"
+            )
+        with b2:
+            bon_vida = st.number_input(
+                "Bonificación aplicada por seguro de vida (%)",
+                min_value=0.0, max_value=5.0, value=0.0, step=0.01, format="%.2f", key="bon_vida"
+            )
+        with b3:
+            bon_otras = st.number_input(
+                "Otras bonificaciones (%)",
+                min_value=0.0, max_value=10.0, value=0.0, step=0.01, format="%.2f", key="bon_otras"
+            )
+        _ = st.form_submit_button("🧮 Calcular ahorro con bonificaciones")
+
+    bon_total = float(bon_hogar + bon_vida + bon_otras)
+    annual_rate_bonif = max(float(annual_rate_pct_b - bon_total), 0.0)
+    r_monthly_bonif = (annual_rate_bonif / 100.0) / 12.0
+
+    df_bon = amortization_schedule(principal_b, r_monthly_bonif, n_months_b)
+    total_interest_bon = float(df_bon["Intereses"].sum()) if not df_bon.empty else 0.0
+    monthly_payment_bon = float(df_bon["Cuota"].iloc[0]) if not df_bon.empty else 0.0
+
+    ahorro_intereses = total_interest_base - total_interest_bon
+    ahorro_cuota_mes = monthly_payment_base - monthly_payment_bon
+    ahorro_total_pagado = (principal_b + total_interest_base) - (principal_b + total_interest_bon)
+
+    # Resultados
+    st.markdown(
+        f"""
+        <div style="
+            background:#e8f0fe;
+            border:1px solid #4A90E2;
+            border-radius:12px;
+            padding:1rem 1.25rem;
+            margin:.5rem 0 1rem 0;
+        ">
+          <div class="value-title">✅ TIN tras bonificaciones</div>
+          <div class="value-big">{annual_rate_bonif:.2f} % (bonificación total: {bon_total:.2f} %)</div>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
+
+    a1, a2, a3 = st.columns(3)
+    a1.metric("💳 Cuota mensual (bonificada)", eur(monthly_payment_bon), delta=eur(-ahorro_cuota_mes))
+    a2.metric("💡 Intereses totales (bonificada)", eur(total_interest_bon), delta=eur(-ahorro_intereses))
+    a3.metric("💰 Ahorro total en € (intereses)", eur(ahorro_intereses))
+
+    comp_df = pd.DataFrame({
+        "Concepto": [
+            "TIN anual",
+            "Cuota mensual",
+            "Intereses totales",
+            "Total pagado (capital + intereses)",
+        ],
+        "Sin bonificar": [
+            f"{annual_rate_pct_b:.2f} %",
+            monthly_payment_base,
+            total_interest_base,
+            principal_b + total_interest_base,
+        ],
+        "Bonificada": [
+            f"{annual_rate_bonif:.2f} %",
+            monthly_payment_bon,
+            total_interest_bon,
+            principal_b + total_interest_bon,
+        ],
+        "Diferencia (€)": [
+            "—",
+            ahorro_cuota_mes,
+            ahorro_intereses,
+            ahorro_total_pagado,
+        ]
+    })
+
+    st.dataframe(
+        comp_df.style.format({
+            "Sin bonificar": lambda x: x if isinstance(x, str) else eur(x),
+            "Bonificada": lambda x: x if isinstance(x, str) else eur(x),
+            "Diferencia (€)": lambda x: x if isinstance(x, str) else eur(x),
+        }),
+        use_container_width=True
+    )
+
+    # Visual rápido: intereses sin vs con
+    cmp_bar = go.Figure()
+    cmp_bar.add_trace(go.Bar(name="Sin bonificar", x=["Intereses totales"], y=[total_interest_base]))
+    cmp_bar.add_trace(go.Bar(name="Bonificada", x=["Intereses totales"], y=[total_interest_bon]))
+    cmp_bar.update_layout(
+        barmode="group",
+        title="Comparativa — Intereses totales",
+        yaxis_title="€"
+    )
+    st.plotly_chart(cmp_bar, use_container_width=True)
+
+    with st.expander("Ver detalle (primeras 12 cuotas) — Sin bonificar vs Bonificada"):
+        cL, cR = st.columns(2)
+        with cL:
+            st.markdown("**Sin bonificar**")
+            st.dataframe(df_base.head(12).style.format(
+                {"Cuota": eur, "Intereses": eur, "Amortización": eur, "Saldo final": eur}
+            ))
+        with cR:
+            st.markdown("**Bonificada**")
+            st.dataframe(df_bon.head(12).style.format(
+                {"Cuota": eur, "Intereses": eur, "Amortización": eur, "Saldo final": eur}
+            ))
+
+    st.caption("Nota: el ahorro mostrado es puramente financiero por bajada de TIN. No incluye el coste de los seguros/bonificaciones.")
+
 # ==========================
 # TAB 2: Comparador Fija vs Mixta
 # ==========================
@@ -470,15 +651,13 @@ with tab_comparador:
 
     st.divider()
 
-    # Preparar cuotas de mixta (ya se usen o no en la visual)
+    # Preparar cuotas de mixta
     n2 = max(n_cmp - m1_months, 0)
-    # Cuota periodo 1
     if r1_m == 0:
         cuota_p1 = P_cmp / n_cmp
     else:
         cuota_p1 = P_cmp * r1_m / (1 - (1 + r1_m) ** (-n_cmp))
 
-    # Si hay periodo 2, cuota recalculada
     if n2 > 0:
         r2_for_calc = r2_m_solution if r2_m_solution is not None else 0.0
         _, _, _, saldo_p1_tmp = mixed_total_interest(P_cmp, n_cmp, r1_m, m1_months, r2_for_calc)
@@ -489,7 +668,6 @@ with tab_comparador:
     else:
         cuota_p2 = 0.0
 
-    # Mostrar INTERESES y TIPOS + cuotas
     cI1, cI2, cI3, cI4 = st.columns(4)
 
     with cI1:
@@ -508,7 +686,6 @@ with tab_comparador:
                 "</div>",
                 unsafe_allow_html=True
             )
-            r2_annual_pct = None
         else:
             if r2_m_solution is None:
                 st.markdown(
@@ -518,7 +695,6 @@ with tab_comparador:
                     "</div>",
                     unsafe_allow_html=True
                 )
-                r2_annual_pct = None
             else:
                 r2_annual_pct = r2_m_solution * 12 * 100.0
                 st.markdown(
@@ -550,13 +726,11 @@ with tab_comparador:
                 unsafe_allow_html=True
             )
 
-    # Detalle de mixta con el r2 encontrado (o 0 si no hay)
     r2_for_table = r2_m_solution if r2_m_solution is not None else 0.0
     mixed_total_chk, ip1_chk, ip2_chk, saldo_p1 = mixed_total_interest(
         P_cmp, n_cmp, r1_m, m1_months, r2_for_table
     )
 
-    # ========= Tablas resumen =========
     st.markdown("### 📘 Resumen — Hipoteca Fija")
     fija_df = pd.DataFrame({
         "Concepto": [
@@ -728,13 +902,11 @@ with tab_inversion:
     itp_text = _fmt_pct(itp * 100)
     ajd_text = _fmt_pct(ajd * 100)
 
-    # Conceptos fijos
     registro_notaria = 1500
     tasacion = 400
     gestoria = 400
     comision_apertura = importe_financiado * 0.02
 
-    # Aportación extra (reforma / otros)
     aportacion_extra = st.number_input(
         "Aportación extra (reforma / otro concepto) (€)",
         min_value=0.0, value=0.0, step=100.0, format="%.2f", key="aport_extra"
@@ -743,7 +915,6 @@ with tab_inversion:
     gastos_fijos = registro_notaria + tasacion + gestoria
     aportacion_total = entrada_eur + impuestos + gastos_fijos + comision_apertura + aportacion_extra
 
-    # Métricas rápidas arriba (con % de impuestos al lado en pequeño)
     cA, cB, cC = st.columns(3)
     cA.metric("💰 Entrada", f"{entrada_pct:.1f}% = {eur(entrada_eur)}")
 
@@ -764,7 +935,6 @@ with tab_inversion:
     cC.metric("🧾 Gastos fijos (Reg.+Not.+Tas.+Gest.)", eur(gastos_fijos))
     st.metric("💸 Comisión de apertura (2%)", eur(comision_apertura))
 
-    # Caja resaltada en azul para la aportación total
     st.markdown(
         f"""
         <div style="
@@ -781,7 +951,6 @@ with tab_inversion:
         unsafe_allow_html=True
     )
 
-    # Tabla resumen detallada (incluye la aportación extra)
     resumen_df = pd.DataFrame({
         "Concepto": [
             "Entrada (no financiado)",
@@ -816,7 +985,6 @@ with tab_inversion:
         "La comisión de apertura es el 2% del importe financiado."
     )
 
-    # 👇 Línea separadora entre la Sección 2 y la 3
     st.divider()
 
     # --- Apartado 3: Ingresos por Alquiler — Cashflow ---
@@ -857,7 +1025,6 @@ with tab_inversion:
         _ = st.form_submit_button("✅ Calcular cashflow")
 
     ingresos_anuales = alquiler_mensual * 12
-
     hipoteca_anual = float(cuota_mensual_inv) * 12
 
     otros_gastos_anuales = (
@@ -869,13 +1036,11 @@ with tab_inversion:
     gastos_anuales_totales = otros_gastos_anuales + hipoteca_anual
     cashflow_anual = ingresos_anuales - gastos_anuales_totales
 
-    # Métricas: ingresos + hipoteca + otros gastos
     cA, cB, cC = st.columns(3)
     cA.metric("📈 Ingresos anuales por alquiler", eur(ingresos_anuales))
     cB.metric("🏦 Gastos de hipoteca anuales", eur(hipoteca_anual))
     cC.metric("📉 Otros gastos anuales (IBI + comunidad + mantenimiento + seguros)", eur(otros_gastos_anuales))
 
-    # Caja resaltada en azul para el cashflow (incluye hipoteca)
     st.markdown(
         f"""
         <div style="
@@ -894,7 +1059,6 @@ with tab_inversion:
 
     st.caption("El cashflow anual mostrado **incluye** hipoteca. No incluye vacancias, IRPF ni otros posibles ajustes.")
 
-    # Línea separadora antes de la nueva sección de ratios
     st.divider()
 
     # --- Apartado 4: Rentabilidad (ratios) ---
@@ -915,10 +1079,10 @@ with tab_inversion:
     )
 
     r_simple = 0.0 if (aportacion_total is None or aportacion_total <= 0) else (cashflow_anual / aportacion_total)
-    r_comp = ((1 + horizonte_anios * r_simple) ** (1 / horizonte_anios)) - 1  # equivalente compuesto
+    r_comp = ((1 + horizonte_anios * r_simple) ** (1 / horizonte_anios)) - 1
 
     def fmt_pct(x: float) -> str:
-        return f"{x*100:,.2f} %".replace(".", ",")  # estilo es-ES con coma
+        return f"{x*100:,.2f} %".replace(".", ",")
 
     c1, c2 = st.columns(2)
 
@@ -964,7 +1128,6 @@ with tab_inversion:
             unsafe_allow_html=True
         )
 
-    # Tabla comparativa año a año (ocultable): simple vs compuesto
     n_h = int(horizonte_anios)
     years = list(range(1, n_h + 1))
 
@@ -978,7 +1141,6 @@ with tab_inversion:
         "Interés compuesto equivalente": [comp_equiv(r_simple, n) for n in years],
     })
 
-    # Preformatear % para evitar Styler y poder ocultar el índice
     df_display = df_ratios.copy()
     df_display["Rentabilidad sobre aportación (Cash-on-Cash)"] = df_display[
         "Rentabilidad sobre aportación (Cash-on-Cash)"
