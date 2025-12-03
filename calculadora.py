@@ -628,7 +628,7 @@ with tab_bonif:
         <div class="param-header">
           <span class="param-chip">Prima orientativa</span>
           <span class="param-subtle">
-            Calculo orientativo de prima en base a capital y edad calculado a <strong>03/12/2025</strong> referente a primas de <strong>ING</strong>
+            Calculo orientativo de prima en base a capital y edad calculado a <strong>03/12/2025</strong> referente a primas de <strong>ING</strong> (Invalidez + Fallecimiento).
           </span>
         </div>
         """,
