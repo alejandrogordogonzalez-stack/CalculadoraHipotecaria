@@ -9,7 +9,7 @@ import streamlit as st
 # Configuración de la página
 # ----------------------------
 st.set_page_config(page_title="Simulador de Hipoteca", layout="wide")
-st.title("🏠 Simulador de HipotecaSSSSS")
+st.title("🏠 Simulador de Hipoteca")
 
 st.caption(
     "Introduce el importe, el plazo y el interés anual. "
