@@ -251,13 +251,27 @@ def parse_number_es(s: str):
     except Exception:
         return None
 
+# --- CALLBACKS para sincronizar capital Banco <-> Aseguradora ---
+def _sync_capital_from_banco():
+    # Copia el texto tal cual (formato ES) del input de Banco al de Aseguradora
+    st.session_state["capital_nn_prima_eur"] = st.session_state.get("capital_ing_prima_eur", "")
+
+def _sync_capital_from_aseg():
+    # Copia el texto tal cual (formato ES) del input de Aseguradora al de Banco
+    st.session_state["capital_ing_prima_eur"] = st.session_state.get("capital_nn_prima_eur", "")
+
 def euro_input(label: str, key: str, default: float, decimals: int = 2,
-               min_value: float | None = None, max_value: float | None = None, help_text: str | None = None) -> float:
+               min_value: float | None = None, max_value: float | None = None,
+               help_text: str | None = None,
+               on_change=None, on_change_args=(), on_change_kwargs=None) -> float:
     raw = st.text_input(
         label,
         value=fmt_number_es(default, decimals),
         key=key,
-        help=help_text or "Ejemplo: 150.000 o 150.000,50"
+        help=help_text or "Ejemplo: 150.000 o 150.000,50",
+        on_change=on_change,
+        args=on_change_args,
+        kwargs=on_change_kwargs or {},
     )
     val = parse_number_es(raw)
     if val is None:
@@ -479,7 +493,7 @@ def _build_df_from_table(table_str: str, capitals: list[int]) -> pd.DataFrame:
     df.index.name = "Edad"
     return df.sort_index()
 
-# ---- Bloque IZQ: ejemplo entidad bancaria (ING) (ya lo tenías) ----
+# ---- ING (Banco) ----
 PREMIAS_ING = {
     18: [9.41, 13.81, 18.64, 22.88, 27.43, 31.96, 36.50, 41.25, 45.83, 50.42, 54.56, 59.19, 63.74, 68.27, 72.81],
     19: [9.25, 13.88, 18.60, 23.13, 27.75, 32.38, 37.00, 41.63, 46.26, 50.88, 55.39, 60.13, 64.76, 69.39, 73.79],
@@ -528,7 +542,7 @@ PREMIAS_ING = {
 PRIMA_ING_DF = pd.DataFrame.from_dict(PREMIAS_ING, orient="index", columns=CAPITALS_STD).sort_index()
 PRIMA_ING_DF.index.name = "Edad"
 
-# ---- Bloque DCHA: ejemplo aseguradora (Nationale Nederlanden) (nuevas tablas) ----
+# ---- NN (Aseguradora) ----
 TABLA_NN_FALLEC = """
 Edad 50.000,00 75.000,00 100.000,00 125.000,00 150.000,00 175.000,00 200.000,00 225.000,00 250.000,00 275.000,00 300.000,00 325.000,00 350.000,00 375.000,00 400.000,00
 18 6,16 6,74 7,32 7,91 8,5 9,08 9,67 10,26 10,84 11,42 12,01 12,6 13,18 13,76 14,35
@@ -621,7 +635,6 @@ Edad 50.000,00 75.000,00 100.000,00 125.000,00 150.000,00 175.000,00 200.000,00 
 59 53,89 77,81 101,73 121,99 142,25 162,5 176,25 197,54 218,82 240,11 261,39 282,81 304,24 325,39 346,54
 60 56,6 80 103,35 125,45 147,55 169,65 185,93 209,09 232,25 255,41 278,57 304,17 329,78 355,38 380,98
 """
-
 NN_FALLEC_DF = _build_df_from_table(TABLA_NN_FALLEC, CAPITALS_STD)
 NN_FALL_IA_DF = _build_df_from_table(TABLA_NN_FALL_IA, CAPITALS_STD)
 
@@ -844,26 +857,10 @@ with tab_bonif:
         unsafe_allow_html=True
     )
 
+    # ✅ CAMBIO 1: quito el recuadro verde y lo dejo a nivel de métricas normales
     a1, a2, a3 = st.columns(3)
     a1.metric("💳 Cuota mensual (bonificada)", eur(monthly_payment_bon), delta=eur(-ahorro_cuota_mes))
-
-    with a2:
-        st.markdown(
-            f"""
-            <div style="
-                background:#e8f5e9;
-                border:1px solid #4caf50;
-                border-radius:12px;
-                padding:1rem 1.25rem;
-                margin:.25rem 0 0 0;
-            ">
-              <div class="value-title">🧾 Ahorro mensual</div>
-              <div class="value-big">{eur(ahorro_cuota_mes)}</div>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
-
+    a2.metric("🧾 Ahorro mensual", eur(ahorro_cuota_mes))
     a3.metric("📆 Ahorro anual", eur(ahorro_anual))
 
     st.caption(
@@ -906,7 +903,7 @@ with tab_bonif:
     st.divider()
 
     # -------------------------
-    # NUEVO: Prima orientativa en 2 BLOQUES (izq = banco, dcha = aseguradora)
+    # Prima orientativa en 2 BLOQUES (izq = banco, dcha = aseguradora)
     # -------------------------
     st.markdown(
         """
@@ -944,13 +941,15 @@ with tab_bonif:
                 min_value=0, max_value=99, value=30, step=1, key="edad_ing_prima"
             )
         with cP2:
+            # ✅ CAMBIO 2: al cambiar aquí, se copia al capital de aseguradora
             capital_ing = euro_input(
                 "Capital a cubrir (€) — Banco",
                 key="capital_ing_prima_eur",
                 default=100000.0,
                 decimals=0,
                 min_value=0.0,
-                max_value=1000000.0
+                max_value=1000000.0,
+                on_change=_sync_capital_from_banco
             )
 
         if capital_ing > 400000 or edad_ing > 65:
@@ -988,13 +987,15 @@ with tab_bonif:
                 min_value=0, max_value=99, value=30, step=1, key="edad_nn_prima"
             )
         with r2:
+            # ✅ CAMBIO 2: al cambiar aquí, se copia al capital de banco
             capital_nn = euro_input(
                 "Capital a cubrir (€) — Aseguradora",
                 key="capital_nn_prima_eur",
                 default=100000.0,
                 decimals=0,
                 min_value=0.0,
-                max_value=1000000.0
+                max_value=1000000.0,
+                on_change=_sync_capital_from_aseg
             )
 
         cobertura = st.radio(
@@ -1026,7 +1027,6 @@ with tab_bonif:
     # -------------------------
     st.divider()
 
-    # Ahorro por bonificación SOLO del seguro de vida:
     annual_rate_only_vida = max(float(annual_rate_pct_b - float(bon_vida)), 0.0)
     r_only_vida_m = (annual_rate_only_vida / 100.0) / 12.0
     df_only_vida = amortization_schedule(principal_b, r_only_vida_m, n_months_b)
@@ -1035,8 +1035,6 @@ with tab_bonif:
     ahorro_vida_mes = monthly_payment_base - monthly_payment_only_vida
     ahorro_vida_anual = ahorro_vida_mes * 12
 
-    # Ahorro por cambio de aseguradora (banco vs aseguradora) usando inputs de la derecha para comparar
-    # (si no hay prima NN válida, no se calcula)
     prima_ing_comp = None
     if edad_nn > 0 and capital_nn > 0:
         prima_ing_comp = prima_orientativa_bilineal(float(edad_nn), float(capital_nn), PRIMA_ING_DF)
@@ -1047,7 +1045,6 @@ with tab_bonif:
         ahorro_cambio_aseg_mes = float(prima_ing_comp - prima_nn)
         ahorro_cambio_aseg_anual = ahorro_cambio_aseg_mes * 12
 
-    # Neto: ahorro por prima (banco->aseguradora) - ahorro por bonificación de vida (si pierdes bonificación al irte del banco)
     ahorro_neto_mes = None
     ahorro_neto_anual = None
     if ahorro_cambio_aseg_mes is not None:
