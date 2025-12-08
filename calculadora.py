@@ -428,6 +428,58 @@ def solve_r2_for_equal_interest(P: float, n: int, r_fixed_m: float, r1_m: float,
     return r2_m_solution, target, total_mixed, ip1, ip2
 
 # ============================
+# ✅ TIR (como Excel) — IRR anual con flujos [-aportación, cashflow...]
+# ============================
+def tir_excel(cashflows, tol=1e-10, max_iter=200):
+    """
+    TIR anual estilo Excel (IRR):
+    - cashflows[0] suele ser la inversión inicial (negativa)
+    - cashflows[1:] los flujos posteriores (anuales)
+    Devuelve la tasa r tal que NPV(r)=0.
+    Si no existe (p.ej. no hay cambio de signo), devuelve np.nan.
+    """
+    cfs = [float(x) for x in cashflows if x is not None]
+
+    # Excel devuelve error si no hay cambio de signo (no hay TIR)
+    if not (any(x < 0 for x in cfs) and any(x > 0 for x in cfs)):
+        return np.nan
+
+    def npv(r):
+        # NPV = sum_{t=0..n} cf_t / (1+r)^t
+        # r > -1
+        return sum(cf / ((1.0 + r) ** i) for i, cf in enumerate(cfs))
+
+    # Búsqueda por bisección (robusta)
+    lo = -0.999999  # cercano a -100% (sin llegar)
+    hi = 0.10       # 10% inicial
+    f_lo = npv(lo)
+    f_hi = npv(hi)
+
+    # Expandimos hi hasta encontrar cambio de signo o límite
+    attempts = 0
+    while f_lo * f_hi > 0 and attempts < 60:
+        hi = hi * 2 + 0.05
+        f_hi = npv(hi)
+        attempts += 1
+
+    if f_lo * f_hi > 0:
+        return np.nan
+
+    for _ in range(max_iter):
+        mid = (lo + hi) / 2.0
+        f_mid = npv(mid)
+        if abs(f_mid) < tol:
+            return mid
+        if f_lo * f_mid <= 0:
+            hi = mid
+            f_hi = f_mid
+        else:
+            lo = mid
+            f_lo = f_mid
+
+    return (lo + hi) / 2.0
+
+# ============================
 # Matrices de primas + interpolación (edad x capital)
 # ============================
 CAPITALS_STD = [50000, 75000, 100000, 125000, 150000, 175000, 200000, 225000, 250000, 275000, 300000, 325000, 350000, 375000, 400000]
@@ -588,7 +640,6 @@ Edad 50.000,00 75.000,00 100.000,00 125.000,00 150.000,00 175.000,00 200.000,00 
 58 30,14 42,72 55,3 67,86 80,42 92,98 105,54 118,11 130,68 143,25 155,82 168,39 180,96 193,52 206,09
 59 31,45 44,68 57,91 71,14 84,37 97,6 110,83 124,06 137,3 150,54 163,77 177 190,23 203,46 216,69
 """
-
 TABLA_NN_FALL_IA = """
 Edad 50.000,00 75.000,00 100.000,00 125.000,00 150.000,00 175.000,00 200.000,00 225.000,00 250.000,00 275.000,00 300.000,00 325.000,00 350.000,00 375.000,00 400.000,00
 18 9,66 11,9 14,14 15,93 17,72 19,51 21,31 23,33 25,35 27,37 29,39 31,41 33,42 35,44 37,46
@@ -857,7 +908,6 @@ with tab_bonif:
         unsafe_allow_html=True
     )
 
-    # ✅ CAMBIO 1: quito el recuadro verde y lo dejo a nivel de métricas normales
     a1, a2, a3 = st.columns(3)
     a1.metric("💳 Cuota mensual (bonificada)", eur(monthly_payment_bon), delta=eur(-ahorro_cuota_mes))
     a2.metric("🧾 Ahorro mensual", eur(ahorro_cuota_mes))
@@ -868,9 +918,6 @@ with tab_bonif:
         "No incluye el coste de los seguros/bonificaciones ni otros gastos/comisiones."
     )
 
-    # -------------------------
-    # Texto informativo (antes de Prima orientativa)
-    # -------------------------
     st.markdown(
         """
         <div style="
@@ -902,9 +949,6 @@ with tab_bonif:
 
     st.divider()
 
-    # -------------------------
-    # Prima orientativa en 2 BLOQUES (izq = banco, dcha = aseguradora)
-    # -------------------------
     st.markdown(
         """
         <div class="param-header">
@@ -919,7 +963,6 @@ with tab_bonif:
 
     col_left, col_right = st.columns(2, gap="large")
 
-    # ===== IZQUIERDA: BANCO (ING) =====
     with col_left:
         st.markdown(
             """
@@ -941,7 +984,6 @@ with tab_bonif:
                 min_value=0, max_value=99, value=30, step=1, key="edad_ing_prima"
             )
         with cP2:
-            # ✅ CAMBIO 2: al cambiar aquí, se copia al capital de aseguradora
             capital_ing = euro_input(
                 "Capital a cubrir (€) — Banco",
                 key="capital_ing_prima_eur",
@@ -966,7 +1008,6 @@ with tab_bonif:
             "Primas orientativas calculadas a 03/12/2025, como ejemplo real de primas de hipotecas con el seguro de ING."
         )
 
-    # ===== DERECHA: ASEGURADORA (NN) =====
     with col_right:
         st.markdown(
             """
@@ -987,7 +1028,6 @@ with tab_bonif:
                 min_value=0, max_value=99, value=30, step=1, key="edad_nn_prima"
             )
         with r2:
-            # ✅ CAMBIO 2: al cambiar aquí, se copia al capital de banco
             capital_nn = euro_input(
                 "Capital a cubrir (€) — Aseguradora",
                 key="capital_nn_prima_eur",
@@ -1022,9 +1062,6 @@ with tab_bonif:
             "Ejemplo para una persona no fumadora, que no usa moto, no practica deporte de riesgo ni tiene trabajo de riesgo."
         )
 
-    # -------------------------
-    # RESUMEN (3 ahorros) — resaltando el último
-    # -------------------------
     st.divider()
 
     annual_rate_only_vida = max(float(annual_rate_pct_b - float(bon_vida)), 0.0)
@@ -1402,7 +1439,6 @@ with tab_inversion:
 
     st.divider()
 
-    # --- Apartado 2: Aportación Inicial ---
     st.markdown(
         """
         <div class="param-header">
@@ -1533,7 +1569,6 @@ with tab_inversion:
 
     st.divider()
 
-    # --- Apartado 3: Ingresos por Alquiler — Cashflow ---
     st.markdown(
         """
         <div class="param-header">
@@ -1598,7 +1633,7 @@ with tab_inversion:
     )
 
     horizonte_anios = st.number_input(
-        "Horizonte (años) para comparar el interés compuesto",
+        "Horizonte (años) para comparar el interés compuesto / TIR",
         min_value=1, max_value=40, value=int(plazo_inv), step=1, key="horizonte_comp"
     )
 
@@ -1606,9 +1641,18 @@ with tab_inversion:
     r_comp = ((1 + horizonte_anios * r_simple) ** (1 / horizonte_anios)) - 1
 
     def fmt_pct(x: float) -> str:
+        if x is None or (isinstance(x, float) and np.isnan(x)):
+            return "—"
         return f"{fmt_number_es(x * 100, 2)} %"
 
-    c1, c2 = st.columns(2)
+    n_h = int(horizonte_anios)
+
+    tir = np.nan
+    if aportacion_total > 0:
+        cashflows = [-float(aportacion_total)] + [float(cashflow_anual)] * n_h
+        tir = tir_excel(cashflows)
+
+    c1, c2, c3 = st.columns(3)
 
     with c1:
         st.markdown(
@@ -1643,33 +1687,62 @@ with tab_inversion:
               <div class="value-title">📈 Interés compuesto equivalente</div>
               <div class="value-big">{fmt_pct(r_comp)}</div>
               <div style="font-size:0.9em;color:#5f6570;margin-top:.35rem">
-                Tasa anual constante que, durante {int(horizonte_anios)} año(s), genera el mismo beneficio que una
-                rentabilidad simple de {fmt_pct(r_simple)}. (Fórmula: <em>((1 + n·r)<sup>1/n</sup> − 1)</em>).<br/>
-                También conocida como <strong>Tasa Anual Equivalente (TAE) de la inversión</strong>.
+                Tasa anual constante que, durante {int(horizonte_anios)} año(s), genera el mismo efecto que una
+                rentabilidad simple de {fmt_pct(r_simple)}. (Fórmula: <em>((1 + n·r)<sup>1/n</sup> − 1)</em>).
               </div>
             </div>
             """,
             unsafe_allow_html=True
         )
 
-    n_h = int(horizonte_anios)
+    with c3:
+        st.markdown(
+            f"""
+            <div style="
+                background:#e8f5e9;
+                border:1px solid #4caf50;
+                border-radius:12px;
+                padding:1rem 1.25rem;
+                margin:.5rem 0 1rem 0;
+            ">
+              <div class="value-title">📌 TIR (como Excel)</div>
+              <div class="value-big">{fmt_pct(tir)}</div>
+              <div style="font-size:0.9em;color:#5f6570;margin-top:.35rem">
+                Calculada como <strong>TIR/IRR</strong> con flujos anuales:
+                <em>[-aportación inicial, cashflow, cashflow, ...]</em> durante {int(horizonte_anios)} año(s).
+                Si no hay cambio de signo (p.ej. cashflow negativo), la TIR no está definida.
+              </div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
     years_list = list(range(1, n_h + 1))
 
     def comp_equiv(r: float, n: int) -> float:
         base = 1 + n * r
         return (base ** (1 / n) - 1) if base > 0 else np.nan
 
+    tir_por_anio = []
+    if aportacion_total > 0:
+        for n in years_list:
+            tir_por_anio.append(tir_excel([-float(aportacion_total)] + [float(cashflow_anual)] * n))
+    else:
+        tir_por_anio = [np.nan] * n_h
+
     df_ratios = pd.DataFrame({
         "Año": years_list,
         "Rentabilidad sobre aportación (Cash-on-Cash)": [r_simple] * n_h,
         "Interés compuesto equivalente": [comp_equiv(r_simple, n) for n in years_list],
+        "TIR (como Excel)": tir_por_anio
     })
 
     df_display = df_ratios.copy()
     df_display["Rentabilidad sobre aportación (Cash-on-Cash)"] = df_display["Rentabilidad sobre aportación (Cash-on-Cash)"].map(fmt_pct)
     df_display["Interés compuesto equivalente"] = df_display["Interés compuesto equivalente"].map(fmt_pct)
+    df_display["TIR (como Excel)"] = df_display["TIR (como Excel)"].map(fmt_pct)
 
-    with st.expander("🔍 Comparativa por año (simple vs compuesto)", expanded=False):
+    with st.expander("🔍 Comparativa por año (CoC vs compuesto vs TIR)", expanded=False):
         st.dataframe(df_display, use_container_width=True, hide_index=True)
 
     render_footer()
